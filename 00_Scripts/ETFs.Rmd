@@ -1,0 +1,150 @@
+---
+title: "Sectoral_ETFs"
+author: "Mandar"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup}
+knitr::opts_chunk$set(cache = TRUE, cache.lazy = FALSE, warning = FALSE,
+                      message = FALSE,echo = TRUE, dpi = 360, warning = FALSE,
+                      fig.width = 8, fig.height = 6)
+
+```
+
+A stock market sector is a group of stocks that have a lot in common with each other, usually because they are in similar industries. There are 11 different stock market sectors, according to the most commonly used classification system, known as the Global Industry Classification Standard (GICS).
+At a glance, the 11 GICS stock market sectors are:
+
+Energy
+Materials
+Industrials
+Utilities
+Healthcare
+Financials
+Consumer Discretionary
+Consumer Staples
+Information Technology
+Communication Services
+Real Estate
+
+
+# For our data on ETFs we focus on
+Vanguard sectoral ETFs 
+VOX
+Communication Services ETF
+
+VCR
+Consumer Discretionary ETF
+
+VDC
+Consumer Staples ETF
+
+VDE
+Energy ETF
+
+VFH
+Financials ETF
+
+VHT
+Health Care ETF
+
+VIS
+Industrials ETF
+
+VGT
+Information Technology ETF
+
+VAW
+Materials ETF
+
+VNQ
+Real Estate ETF
+
+VPU
+Utilities ETF
+
+
+
+
+
+
+
+```{r}
+# Prequisite libraries
+library(tidyquant)
+library(tidymodels)
+library(tidyverse)
+library(tidyfinance)
+library(broom)
+library(lubridate)
+```
+
+# Downloading the data for Vanguard ETFs
+```{r}
+symbols <- c("VOX","VCR","VDC","VDE","VFH",
+             "VHT","VIS","VGT","VAW","VNQ",
+             "VPU")
+
+ vang_prices <- tq_get(symbols, get = "stock.prices", from = "2004-01-01")
+ 
+ ## Checking for date consistency:- common date 
+ # We find that it is better to use 2005 as the starting
+ vang_prices |> 
+   group_by(symbol) |> 
+   summarise(
+     min_date = min(date),
+     max_date = max(date)
+   )
+ #changing the date for consistency
+
+vang_prices <- tq_get(symbols, get = "stock.prices", from = "2005-01-01")
+ 
+# saving the csv file
+write.csv(vang_prices, file = "/Users/mandarphatak/Documents/GitHub/Portfolios_Analysis/00_Data//vang_prices.csv", row.names = FALSE)
+
+#saving as rds file
+saveRDS(vang_prices, file = "/Users/mandarphatak/Documents/GitHub/Portfolios_Analysis/00_Data//vang_prices.rds")
+
+
+
+
+```
+## Downloading the data for  
+Ishares ETFs
+
+
+Symbol
+
+IYW
+IYF
+IYR
+IYH
+IYG
+IYC
+IYJ
+IYE
+IDU
+IYK
+IYM
+
+```{r}
+symbols <- c("IYW","IYF","IYR",
+"IYH",
+"IYG",
+"IYC",
+"IYJ",
+"IYE",
+"IDU",
+"IYK",
+"IYM")
+ishares_prices <- tq_get(symbols, get = "stock.prices", from = "2004-01-01")
+ 
+ishares_prices |> 
+   group_by(symbol) |> 
+   summarise(
+     min_date = min(date),
+     max_date = max(date)
+   )
+```
+
+
