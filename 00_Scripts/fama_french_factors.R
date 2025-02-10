@@ -13,6 +13,8 @@ factors_ff3_monthly <- factors_ff3_monthly_raw$subsets$data[[1]] |>
   rename_with(str_to_lower) |>
   rename(mkt_excess = `mkt-rf`) |> 
   filter(date >= "1960-01-01")
+saveRDS(factors_ff3_monthly, file = "/Users/mandarphatak/Documents/Github/Asset_Pricing/00_Data/factors_ff3_monthly.rds")
+
 ## Fama-French (5 Factors )
 
 factors_ff5_monthly_raw <- download_french_data("Fama/French 5 Factors (2x3)")
@@ -27,4 +29,4 @@ factors_ff5_monthly <- factors_ff5_monthly_raw$subsets$data[[1]] |>
   rename(mkt_excess = `mkt-rf`) |> 
   filter(date >= "1960-01-01")
 
-
+saveRDS(factors_ff5_monthly, file = "/Users/mandarphatak/Documents/Github/Asset_Pricing/00_Data/factors_ff5_monthly.rds")
