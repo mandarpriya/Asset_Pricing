@@ -159,6 +159,25 @@ We also download the data for sectoral index of S&P500 for understanding the per
 10:S&P 500 Consumer Discretionary (^SP500-25)
 11:S&P 500 Utilities (Sector)(^SP500-55)
 
+```{r}
+symbols <- c("^SP500-15","^SP500-20","^SP500-40","^SP500-45",
+             "^SP500-50","^SP500-30","^SP500-35","^SP500-60",
+             "^GSPE","^SP500-25","^SP500-55")
+sp500_sector_prices <- tq_get(symbols, get="stock.prices", from ="2000-01-01")
+sp500_sector_prices |> 
+  group_by(symbol) |> 
+  summarise(
+    min_date = min(date),
+    max_date = max(date)
+  )
+# common_date is 2002-03-01
+sp500_sector_prices <- tq_get(symbols, get="stock.prices", from ="2002-03-01")
+# Saving the data
+
+saveRDS(sp500_sector_prices, file = "/Users/mandarphatak/Documents/Github/Asset_Pricing/00_Data/sp500_sectors.rds")
+write_csv(sp500_sector_prices,file = "/Users/mandarphatak/Documents/GitHub/Asset_Pricing/00_Data/sp500_sectors.csv")
+```
+
 
 
 
