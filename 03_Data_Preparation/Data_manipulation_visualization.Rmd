@@ -337,4 +337,75 @@ tech_rets |>
 ## From above timeseries plot of S&P500 technology sector index we observe similar drawdowns and upvard trends over the perido of time. The range of drawdown is a bit less than the IYW due to being an index.During Covid the performance based on returns is nearly the same.
 
 
+### Lets see how much investment 
 
+```{r}
+library(ggplot2)
+library(dplyr)
+
+# Calculate cumulative returns
+plot_investment_growth <- function(data) {
+  growth_data <- data |>
+    mutate(
+      cum_return = cumprod(1 + returns),  # Calculate cumulative returns
+      investment_value = cum_return       # Assuming $1 initial investment
+    )
+  
+  # Create the plot
+  ggplot(growth_data, aes(x = date, y = investment_value)) +
+    geom_line(color = "#2c3e50", size = 1) +
+    labs(
+      title = "Growth of $1 Investment in S&P 500 Technology Sector",
+      x = "Date",
+      y = "Investment Value ($)",
+      caption = "Data source: Yahoo Finance"
+    ) +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(size = 14, face = "bold"),
+      axis.title = element_text(size = 12),
+      panel.grid.minor = element_blank()
+    ) +
+    scale_y_continuous(labels = scales::dollar_format()) +
+    scale_x_date(date_breaks = "2 years", date_labels = "%Y")
+}
+
+# Generate the plot
+tech_growth_plot <- plot_investment_growth(tech_rets)
+print(tech_growth_plot)
+```
+```{r}
+plot_investment_growth <- function(data) {
+  growth_data <- data |>
+    mutate(
+      cum_return = cumprod(1 + returns),  # Calculate cumulative returns
+      investment_value = cum_return       # Assuming $1 initial investment
+    )
+  
+  # Create the plot
+  ggplot(growth_data, aes(x = date, y = investment_value)) +
+    geom_line(color = "#2c3e50", size = 1) +
+    labs(
+      title = "Growth of $1 Investment in IYW ",
+      x = "Date",
+      y = "Investment Value ($)",
+      caption = "Data source: Yahoo Finance"
+    ) +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(size = 14, face = "bold"),
+      axis.title = element_text(size = 12),
+      panel.grid.minor = element_blank()
+    ) +
+    scale_y_continuous(labels = scales::dollar_format()) +
+    scale_x_date(date_breaks = "2 years", date_labels = "%Y")
+}
+
+# Generate the plot
+tech_growth_plot <- plot_investment_growth(tech_rets)
+print(tech_growth_plot)
+plot_investment_growth(ishare_rets |> filter(symbol == "IYW"))
+```
+# this shows that the investment growth is more from IYW compared to S&P 500 technology sector index
+
+#
