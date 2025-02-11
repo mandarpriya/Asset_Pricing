@@ -215,7 +215,125 @@ ishare_rets |>
 ```
 
 ## From the above time series visualization of the IYW returns we observe that it suffered the most suring financial crisis and then the covid. (IYW) fund generally  invests at least 80% of its assets in the component securities of its underlying index. The underlying index measures the performance of the technology sector of the U.S. equity market, as defined by FTSE Russell. The fund is non-diversified.Thus it create an interesting view that Financial crisis had a spillover effect across other sectors, in this case for technology. The first reason could be that the clients of tech cos were  financial institutions  who went bankrupt during that period so no funding for projects. second reason could be the institutional investors / fund managers / hedge funds either suffered huge losses resulting in reduced investments for the tech sector.
-In order to have a more clear idea about the performance of technology sector we use the S&P 500 technology sector index performance
+
+Performance of S&P500 Tech Sector
+#In order to have a more clear idea about the performance of technology sector we use the S&P 500 technology sector index performance:- 
+
+```{r}
+
+# Data for S&P500 Technology Sector Index 
+tech_sectors_prices <- tq_get("^SP500-45", get = "stock.prices", from = "2004-01-01")
+
+# Monthly returns
+tech_rets <- tech_sectors_prices |> 
+  tq_transmute(select = adjusted,
+               mutate_fun = periodReturn,
+               period     = "monthly",
+               col_rename = "returns") |> 
+  # for making the data consistent with the dates
+  mutate(date = rollback(date, roll_to_first = TRUE))
+
+tech_rets |> head()
+```
+
+# S&P 500 Information Technology (^SP500-45) 
+```{r}
+recession_start <- as.Date("2007-12-01")
+recession_end <- as.Date("2009-06-30")
+covid_start <- as.Date("2020-02-01")
+covid_end <- as.Date("2020-04-30")
+covid_final <- as.Date("2023-05-01")
+tech_rets |> 
+  ggplot(aes(date, returns)) +
+  geom_line(col = "#32a84f", linwidth = 3) +
+  # Vertical lines
+  geom_vline(xintercept = recession_start, 
+             linetype = "dashed", 
+             color = "darkred", 
+             linewidth = 0.5) +
+  geom_vline(xintercept = recession_end, 
+             linetype = "dashed", 
+             color = "darkred", 
+             linewidth = 0.5) +
+  geom_vline(xintercept = covid_start, 
+             linetype = "dashed", 
+             color = "black", 
+             linewidth = 0.5) +
+  geom_vline(xintercept = covid_end, 
+             linetype = "dashed", 
+             color = "black", 
+             linewidth = 0.5) +
+  geom_vline(xintercept = covid_final, 
+             linetype = "dashed", 
+             color = "black", 
+             linewidth = 0.5) +
+  scale_x_date(
+    limits = c(as.Date("2004-01-01"), as.Date("2025-02-01")),
+    date_breaks = "3 years",
+    date_labels = "%Y",
+    expand = c(0,0)
+  ) +
+  scale_y_continuous(
+    limits = c(-.170, .150),
+    expand = c(0,0), 
+    breaks = c(seq(-.170, .150, .05), .150), 
+    labels = function(x) paste0(x, "%")
+  ) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  # Annotations positioned between lines
+  annotate("text",
+           x = recession_start + (recession_end - recession_start)/2,  # Middle of financial crisis
+           y = 0.140,
+           label = "Great Recession\n(Financial Crisis)",
+           color = "darkred",
+           fontface = "bold",
+           size = 2.5) +
+  
+  annotate("text",
+           x = covid_start + (covid_end - covid_start)/2,  # Middle of COVID recession
+           y = 0.140,
+           label = "COVID\nRecession",
+           color = "black",
+           fontface = "bold",
+           size = 2.5) +
+  
+  annotate("text",
+           x = covid_end + (covid_final - covid_end)/2,  # Middle of COVID period
+           y = 0.140,
+           label = "COVID Period",
+           color = "black",
+           fontface = "bold",
+           size = 2.5) +
+  
+  labs(
+    title = "S&P 500 Information Technology Monthly Returns",
+    subtitle = "Period: 2004-2025",
+    caption = "S&P",
+    x = "",
+    y = ""
+  ) +
+  theme(
+    plot.title.position = "plot",
+    plot.title = element_text(hjust = 0, face = "bold", colour = "black"),
+    plot.subtitle = element_text(hjust = 0, face = "bold", colour = "black"),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold", color = "black"),
+    axis.text.y = element_text(face = "bold", color = "black"),
+    axis.title = element_text(face = "bold", color = "black"),
+    axis.line = element_line(color = "black", linewidth = 1),
+    panel.background = element_rect(fill = "grey", color = NA),
+    plot.background = element_rect(fill = "grey", color = NA),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_line(color = "lightgrey", linewidth = 0.5),
+    axis.line.y.right = element_line(color = "black", linewidth = 1),
+    axis.text.y.right = element_text(face = "bold", color = "black"),
+    axis.title.y.right = element_text(face = "bold", color = "black", angle = 90),
+    legend.position = "none"
+  )
+  
+  
+```
+
+
 
 
 
