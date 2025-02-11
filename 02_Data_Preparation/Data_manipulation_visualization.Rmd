@@ -406,6 +406,7 @@ tech_growth_plot <- plot_investment_growth(tech_rets)
 print(tech_growth_plot)
 plot_investment_growth(ishare_rets |> filter(symbol == "IYW"))
 ```
-# this shows that the investment growth is more from IYW compared to S&P 500 technology sector index
+# this shows that the  investment growth for  IYW is more than compared to S&P 500 technology sector index.
 
-#
+
+
