@@ -334,6 +334,7 @@ tech_rets |>
 ```
 
 
+## From above timeseries plot of S&P500 technology sector index we observe similar drawdowns and upvard trends over the perido of time. The range of drawdown is a bit less than the IYW due to being an index.During Covid the performance based on returns is nearly the same.
 
 
 
