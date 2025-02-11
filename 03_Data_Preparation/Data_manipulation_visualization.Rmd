@@ -1,0 +1,221 @@
+---
+title: "Asset_Returns"
+author: "Mandar"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup}
+knitr::opts_chunk$set(cache = TRUE, cache.lazy = FALSE, warning = FALSE,
+                      message = FALSE,echo = TRUE, dpi = 360, warning = FALSE,
+                      fig.width = 10, fig.height = 8)
+
+```
+
+
+```{r}
+# Prequisite libraries
+library(tidyquant)
+library(tidymodels)
+library(tidyverse)
+library(tidyfinance)
+library(broom)
+library(lubridate)
+
+```
+
+# Data manipulation:- Converting the daily data to returns (monthly returns)
+```{r}
+# reading the data
+ishares_prices <- readRDS("00_Data/ishares_prices.rds")
+# Monthly Returns
+ishare_rets <- ishares_prices |> 
+  group_by(symbol) |> 
+  tq_transmute(select = adjusted,
+               mutate_fun = periodReturn,
+               period     = "monthly",
+               col_rename = "returns") |> 
+  ungroup() |> 
+  # for making the data consistent with the dates
+  mutate(date = rollback(date, roll_to_first = TRUE))
+
+```
+
+# Data Visualization:- 
+```{r}
+# this gives mean returns for each sector ETF but it is not very clear
+ishare_rets |> 
+  group_by(symbol) |> 
+  ggplot(aes(date,returns, colour = symbol)) +
+  geom_line() + facet_wrap(~symbol, scales = "free",ncol =4) +
+  scale_x_date(
+        limits = c(as.Date("2004-01-01"), as.Date("2025-02-01")),
+        date_breaks = "3 years",
+        date_labels = "%Y",
+        expand = c(0,0)
+    ) +
+  scale_y_continuous(labels = function(x) paste0(x, "%")) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  labs(
+    title = "Sectoral ETFs Monthly Returns",
+    subtitle = "Period:2004-2025",
+    caption = "ishares ETFs",
+    x = "",
+    y = "" 
+  ) +
+  theme(
+       plot.title.position = "plot",
+        plot.title = element_text(hjust = 0, face = "bold", colour = "black"),
+        plot.subtitle = element_text(hjust = 0, face = "bold", colour = "black"),
+        axis.text.x = element_text(angle = 45, hjust = 1, face = "bold", color = "black"),
+        axis.text.y = element_text(face = "bold", color = "black"),
+        axis.title = element_text(face = "bold", color = "black"),
+        axis.line = element_line(color = "black", linewidth  = 1),
+        panel.background = element_rect(fill = "grey", color = NA),
+        plot.background = element_rect(fill = "grey", color = NA),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(color = "lightgrey", linewidth  = 0.5),
+        axis.line.y.right = element_line(color = "black", linewidth  = 1),
+        axis.text.y.right = element_text(face = "bold", color = "black"),
+        axis.title.y.right = element_text(face = "bold", color = "black", angle = 90),
+       legend.position = "none"
+        
+    ) 
+
+```
+
+## From above we observe that all the sectoral ETFS witnessed the drawdowns during the financial crisis period (2007-2008) and followed by the recession in the US economy. Every ETFs reversed the negative trend in the after the 2009 onwards , this could be attributed to the Fed intervention. In comparison,  Covid (Pandemic)  also led to the underperformance   ETFs, but the extent of negative shock in form of the returns was less compared to that of Financial Crisis.
+
+## So lets dive into each sectoral ETFs and see how each ETF performed during the full time period
+
+```{r}
+# Define recession dates
+recession_start <- as.Date("2007-12-01")
+recession_end <- as.Date("2009-06-30")
+covid_start <- as.Date("2020-02-01")
+covid_end <- as.Date("2020-04-30")
+covid_final <- as.Date("2023-05-01")
+
+ishare_rets |> 
+  filter(symbol == "IYW") |> 
+  ggplot(aes(date, returns)) + 
+  # Financial Crisis rectangle
+  annotate("rect", 
+           xmin = recession_start, 
+           xmax = recession_end,
+           ymin = -Inf, 
+           ymax = Inf,
+           alpha = 0.2,
+           fill = "gray") +
+  # COVID recession rectangle
+  annotate("rect", 
+           xmin = covid_start, 
+           xmax = covid_end,
+           ymin = -Inf, 
+           ymax = Inf,
+           alpha = 0.2,
+           fill = "gray") +
+  # COVID period rectangle
+  annotate("rect", 
+           xmin = covid_end, 
+           xmax = covid_final,
+           ymin = -Inf, 
+           ymax = Inf,
+           alpha = 0.1,
+           fill = "darkgrey") +
+  
+  # Vertical lines
+  geom_vline(xintercept = recession_start, 
+             linetype = "dashed", 
+             color = "darkred", 
+             linewidth = 0.5) +
+  geom_vline(xintercept = recession_end, 
+             linetype = "dashed", 
+             color = "darkred", 
+             linewidth = 0.5) +
+  geom_vline(xintercept = covid_start, 
+             linetype = "dashed", 
+             color = "black", 
+             linewidth = 0.5) +
+  geom_vline(xintercept = covid_end, 
+             linetype = "dashed", 
+             color = "black", 
+             linewidth = 0.5) +
+  geom_vline(xintercept = covid_final, 
+             linetype = "dashed", 
+             color = "black", 
+             linewidth = 0.5) +
+  
+  geom_line(col = "blue") +
+  scale_x_date(
+    limits = c(as.Date("2004-01-01"), as.Date("2025-02-01")),
+    date_breaks = "3 years",
+    date_labels = "%Y",
+    expand = c(0,0)
+  ) +
+  scale_y_continuous(
+    limits = c(-.170, .150),
+    expand = c(0,0), 
+    breaks = c(seq(-.170, .150, .05), .150), 
+    labels = function(x) paste0(x, "%")
+  ) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  
+  # Annotations positioned between lines
+  annotate("text",
+           x = recession_start + (recession_end - recession_start)/2,  # Middle of financial crisis
+           y = 0.140,
+           label = "Great Recession\n(Financial Crisis)",
+           color = "darkred",
+           fontface = "bold",
+           size = 2.5) +
+  
+  annotate("text",
+           x = covid_start + (covid_end - covid_start)/2,  # Middle of COVID recession
+           y = 0.140,
+           label = "COVID\nRecession",
+           color = "black",
+           fontface = "bold",
+           size = 2.5) +
+  
+  annotate("text",
+           x = covid_end + (covid_final - covid_end)/2,  # Middle of COVID period
+           y = 0.140,
+           label = "COVID Period",
+           color = "black",
+           fontface = "bold",
+           size = 2.5) +
+  
+  labs(
+    title = "IYW Monthly Returns",
+    subtitle = "Period: 2004-2025",
+    caption = "ishares ETF",
+    x = "",
+    y = ""
+  ) +
+  theme(
+    plot.title.position = "plot",
+    plot.title = element_text(hjust = 0, face = "bold", colour = "black"),
+    plot.subtitle = element_text(hjust = 0, face = "bold", colour = "black"),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold", color = "black"),
+    axis.text.y = element_text(face = "bold", color = "black"),
+    axis.title = element_text(face = "bold", color = "black"),
+    axis.line = element_line(color = "black", linewidth = 1),
+    panel.background = element_rect(fill = "grey", color = NA),
+    plot.background = element_rect(fill = "grey", color = NA),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_line(color = "lightgrey", linewidth = 0.5),
+    axis.line.y.right = element_line(color = "black", linewidth = 1),
+    axis.text.y.right = element_text(face = "bold", color = "black"),
+    axis.title.y.right = element_text(face = "bold", color = "black", angle = 90),
+    legend.position = "none"
+  )
+  
+  
+```
+
+## From the above time series visualization of the IYW returns we observe that it suffered the most suring financial crisis and then the covid. (IYW) fund generally  invests at least 80% of its assets in the component securities of its underlying index. The underlying index measures the performance of the technology sector of the U.S. equity market, as defined by FTSE Russell. The fund is non-diversified.Thus it create an interesting view that Financial crisis had a spillover effect across other sectors, in this case for technology. The first reason could be that the clients of tech cos were  financial institutions  who went bankrupt during that period so no funding for projects. second reason could be the institutional investors / fund managers / hedge funds either suffered huge losses resulting in reduced investments for the tech sector.
+In order to have a more clear idea about the performance of technology sector we use the S&P 500 technology sector index performance
+
+
+
