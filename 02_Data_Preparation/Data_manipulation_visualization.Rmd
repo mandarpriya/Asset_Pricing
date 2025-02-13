@@ -243,7 +243,7 @@ ishare_rets |>
     limits = c(-.130, .120),
     expand = c(0,0), 
     breaks = c(seq(-.130, .120, .05), .120), 
-    labels = function(x) paste0(x, "%")
+     labels = function(x) sprintf("%.1f%%", x * 100)
   ) +
   geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
 
@@ -290,9 +290,79 @@ ishare_rets |>
   )
 
 ```
+```{r}
+# Define recession dates
+recession_start <- as.Date("2007-12-01")
+recession_end <- as.Date("2010-01-01")  # Extended to cover early 2010
+covid_start <- as.Date("2020-02-01")
+covid_end <- as.Date("2023-05-01")
+
+ishare_rets |> 
+  filter(symbol == "IYF") |> 
+  ggplot(aes(date, returns)) + 
+  geom_rect(aes(xmin = recession_start, xmax = recession_end, ymin = -Inf, ymax = Inf),
+            fill = "red", alpha = 0.2) +  # Light shading for recession
+  # COVID rectangle
+  geom_rect(aes(xmin = covid_start, xmax = covid_end, ymin = -Inf, ymax = Inf),
+            fill = "#89CFF0", alpha = 0.2) +  # Light shading for COVID
+  
+  geom_line() +
+  scale_x_date(
+    limits = c(as.Date("2004-01-01"), as.Date("2025-02-01")),
+    date_breaks = "3 years",
+    date_labels = "%Y",
+    expand = c(0,0)
+  ) +
+  scale_y_continuous(
+    limits = c(-.3,.3),
+    breaks = seq(-.3,.3,.05), 
+    expand = c(0,0), 
+    labels = function(x) sprintf("%.1f%%", x * 100)  # Format to 1 decimal place
+) +
+  # Annotations positioned within plot range
+  annotate("text",
+           x = recession_start + (recession_end - recession_start)/2,  # Middle of financial crisis
+           y = .25,  # Adjusted within y-limits
+           label = "Great Recession\n(Financial Crisis)",
+           color = "darkred",
+           fontface = "bold",
+           size = 3) +
+  
+  annotate("text",
+           x = covid_start + (covid_end - covid_start)/2,  # Middle of COVID recession
+           y = .25,  # Adjusted within y-limits
+           label = "COVID",
+           color = "black",
+           fontface = "bold",
+           size = 3) +
+  labs(
+    title = "IYF Monthly Returns",
+    subtitle = "Period: 2004-2025",
+    caption = "ishares ETF",
+    x = "",
+    y = ""
+  ) +
+  theme(
+    plot.title.position = "plot",
+    plot.title = element_text(hjust = 0, face = "bold", colour = "black"),
+    plot.subtitle = element_text(hjust = 0, face = "bold", colour = "black"),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold", color = "black"),
+    axis.text.y = element_text(face = "bold", color = "black"),
+    axis.title = element_text(face = "bold", color = "black"),
+    axis.line = element_line(color = "black", linewidth = 1),
+    panel.background = element_rect(fill = "grey", color = NA),
+    plot.background = element_rect(fill = "grey", color = NA),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_line(color = "lightgrey", linewidth = 0.5),
+    axis.line.y.right = element_line(color = "black", linewidth = 1),
+    axis.text.y.right = element_text(face = "bold", color = "black"),
+    axis.title.y.right = element_text(face = "bold", color = "black", angle = 90),
+    legend.position = "none"
+  )
+```
 
 
-## From the above time series visualization of the IYW returns we observe that it suffered the most suring financial crisis and then the covid. (IYW) fund generally  invests at least 80% of its assets in the component securities of its underlying index. The underlying index measures the performance of the technology sector of the U.S. equity market, as defined by FTSE Russell. The fund is non-diversified.Thus it create an interesting view that Financial crisis had a spillover effect across other sectors, in this case for technology. The first reason could be that the clients of tech cos were  financial institutions  who went bankrupt during that period so no funding for projects. second reason could be the institutional investors / fund managers / hedge funds either suffered huge losses resulting in reduced investments for the tech sector.
+
 
 Performance of S&P500 Tech Sector
 #In order to have a more clear idea about the performance of technology sector we use the S&P 500 technology sector index performance:- 
