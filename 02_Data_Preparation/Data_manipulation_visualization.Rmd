@@ -88,6 +88,8 @@ ishare_rets |>
 
 ## So lets dive into each sectoral ETFs and see how each ETF performed during the full time period
 
+
+### IYW: Technology
 ```{r}
 # Define recession dates
 recession_start <- as.Date("2007-12-01")
@@ -213,7 +215,7 @@ ishare_rets |>
   
   
 ```
-## IDU Utilites sectors
+### IDU Utilites 
 ```{r}
 # Define recession dates
 recession_start <- as.Date("2007-12-01")
@@ -290,6 +292,7 @@ ishare_rets |>
   )
 
 ```
+### IYF Financials
 ```{r}
 # Define recession dates
 recession_start <- as.Date("2007-12-01")
@@ -337,6 +340,77 @@ ishare_rets |>
            size = 3) +
   labs(
     title = "IYF Monthly Returns",
+    subtitle = "Period: 2004-2025",
+    caption = "ishares ETF",
+    x = "",
+    y = ""
+  ) +
+  theme(
+    plot.title.position = "plot",
+    plot.title = element_text(hjust = 0, face = "bold", colour = "black"),
+    plot.subtitle = element_text(hjust = 0, face = "bold", colour = "black"),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold", color = "black"),
+    axis.text.y = element_text(face = "bold", color = "black"),
+    axis.title = element_text(face = "bold", color = "black"),
+    axis.line = element_line(color = "black", linewidth = 1),
+    panel.background = element_rect(fill = "grey", color = NA),
+    plot.background = element_rect(fill = "grey", color = NA),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_line(color = "lightgrey", linewidth = 0.5),
+    axis.line.y.right = element_line(color = "black", linewidth = 1),
+    axis.text.y.right = element_text(face = "bold", color = "black"),
+    axis.title.y.right = element_text(face = "bold", color = "black", angle = 90),
+    legend.position = "none"
+  )
+```
+###IYR: Real Estate
+```{r}
+# Define recession dates
+recession_start <- as.Date("2007-12-01")
+recession_end <- as.Date("2010-01-01")  # Extended to cover early 2010
+covid_start <- as.Date("2020-02-01")
+covid_end <- as.Date("2023-05-01")
+
+ishare_rets |> 
+  filter(symbol == "IYR") |> 
+  ggplot(aes(date, returns)) + 
+  geom_rect(aes(xmin = recession_start, xmax = recession_end, ymin = -Inf, ymax = Inf),
+            fill = "red", alpha = 0.2) +  # Light shading for recession
+  # COVID rectangle
+  geom_rect(aes(xmin = covid_start, xmax = covid_end, ymin = -Inf, ymax = Inf),
+            fill = "#89CFF0", alpha = 0.2) +  # Light shading for COVID
+  
+  geom_line(col = "#034694") +
+  scale_x_date(
+    limits = c(as.Date("2004-01-01"), as.Date("2025-02-01")),
+    date_breaks = "3 years",
+    date_labels = "%Y",
+    expand = c(0,0)
+  ) +
+  scale_y_continuous(
+    limits = c(-.3,.3),
+    breaks = seq(-.3,.3,.05), 
+    expand = c(0,0), 
+    labels = function(x) sprintf("%.1f%%", x * 100)  # Format to 1 decimal place
+) +
+  # Annotations positioned within plot range
+  annotate("text",
+           x = recession_start + (recession_end - recession_start)/2,  # Middle of financial crisis
+           y = .25,  # Adjusted within y-limits
+           label = "Great Recession\n(Financial Crisis)",
+           color = "darkred",
+           fontface = "bold",
+           size = 3) +
+  
+  annotate("text",
+           x = covid_start + (covid_end - covid_start)/2,  # Middle of COVID recession
+           y = .25,  # Adjusted within y-limits
+           label = "COVID",
+           color = "black",
+           fontface = "bold",
+           size = 3) +
+  labs(
+    title = "IYR Monthly Returns",
     subtitle = "Period: 2004-2025",
     caption = "ishares ETF",
     x = "",
