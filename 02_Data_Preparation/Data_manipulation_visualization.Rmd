@@ -888,6 +888,13 @@ ishare_rets |>
 
 
 
+## Analysis :- From the above plots for all the 11 Sectoral ETFs for the time period 2004-2025 we can clearly see that Financial Crisis (2007-2009) and Covid (2020-2023) had -ve impact on the performace of all the ETFs. Therefore these two events are the anomaly or in other words extreme events.  
+
+
+
+
+
+
 Performance of S&P500 Tech Sector
 #In order to have a more clear idea about the performance of technology sector we use the S&P 500 technology sector index performance:- 
 
