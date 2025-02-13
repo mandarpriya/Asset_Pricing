@@ -112,7 +112,7 @@ IYW: Technology
 IYF: Financials
 IYR: Real Estate
 IYH: Healthcare
-IYG: Financial Services
+IYZ: Communications
 IYC: Consumer Discretionary
 IYJ: Industrials
 IYE: Energy
@@ -123,7 +123,7 @@ IYM: Materials
 ```{r}
 symbols <- c("IYW","IYF","IYR",
 "IYH",
-"IYG",
+"IYZ",
 "IYC",
 "IYJ",
 "IYE",
@@ -177,6 +177,26 @@ sp500_sector_prices <- tq_get(symbols, get="stock.prices", from ="2002-03-01")
 saveRDS(sp500_sector_prices, file = "/Users/mandarphatak/Documents/Github/Asset_Pricing/00_Data/sp500_sectors.rds")
 write_csv(sp500_sector_prices,file = "/Users/mandarphatak/Documents/GitHub/Asset_Pricing/00_Data/sp500_sectors.csv")
 ```
+# Monthly data 
+```{r}
+sp500_sector_prices <- readRDS("/Users/mandarphatak/Documents/GitHub/Asset_Pricing/00_Data/sp500_sectors.rds")
+
+sp500_sector_rets <- sp500_sector_prices |> 
+  group_by(symbol) |> 
+  tq_transmute(select = adjusted,
+               mutate_fun = periodReturn,
+               period     = "monthly",
+               col_rename = "returns") |> 
+  ungroup() |> 
+  # for making the data consistent with the dates
+  mutate(date = rollback(date, roll_to_first = TRUE))
+```
+
+# Saving the data
+```{r}
+saveRDS(sp500_sector_rets, file = "/Users/mandarphatak/Documents/GitHub/Asset_Pricing/00_Data/sp500_sector_rets.rds")
+```
+
 
 
 
