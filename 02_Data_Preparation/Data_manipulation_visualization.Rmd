@@ -93,101 +93,49 @@ ishare_rets |>
 ```{r}
 # Define recession dates
 recession_start <- as.Date("2007-12-01")
-recession_end <- as.Date("2009-06-30")
+recession_end <- as.Date("2010-01-01")  # Extended to cover early 2010
 covid_start <- as.Date("2020-02-01")
-covid_end <- as.Date("2020-04-30")
-covid_final <- as.Date("2023-05-01")
+covid_end <- as.Date("2023-05-01")
 
 ishare_rets |> 
   filter(symbol == "IYW") |> 
   ggplot(aes(date, returns)) + 
-  # Financial Crisis rectangle
-  annotate("rect", 
-           xmin = recession_start, 
-           xmax = recession_end,
-           ymin = -Inf, 
-           ymax = Inf,
-           alpha = 0.2,
-           fill = "gray") +
-  # COVID recession rectangle
-  annotate("rect", 
-           xmin = covid_start, 
-           xmax = covid_end,
-           ymin = -Inf, 
-           ymax = Inf,
-           alpha = 0.2,
-           fill = "gray") +
-  # COVID period rectangle
-  annotate("rect", 
-           xmin = covid_end, 
-           xmax = covid_final,
-           ymin = -Inf, 
-           ymax = Inf,
-           alpha = 0.1,
-           fill = "darkgrey") +
+  geom_rect(aes(xmin = recession_start, xmax = recession_end, ymin = -Inf, ymax = Inf),
+            fill = "red", alpha = 0.2) +  # Light shading for recession
+  # COVID rectangle
+  geom_rect(aes(xmin = covid_start, xmax = covid_end, ymin = -Inf, ymax = Inf),
+            fill = "#89CFF0", alpha = 0.2) +  # Light shading for COVID
   
-  # Vertical lines
-  geom_vline(xintercept = recession_start, 
-             linetype = "dashed", 
-             color = "darkred", 
-             linewidth = 0.5) +
-  geom_vline(xintercept = recession_end, 
-             linetype = "dashed", 
-             color = "darkred", 
-             linewidth = 0.5) +
-  geom_vline(xintercept = covid_start, 
-             linetype = "dashed", 
-             color = "black", 
-             linewidth = 0.5) +
-  geom_vline(xintercept = covid_end, 
-             linetype = "dashed", 
-             color = "black", 
-             linewidth = 0.5) +
-  geom_vline(xintercept = covid_final, 
-             linetype = "dashed", 
-             color = "black", 
-             linewidth = 0.5) +
-  
-  geom_line(col = "blue") +
+  geom_line(col = "#034694",linewidth = 0.7) +
   scale_x_date(
     limits = c(as.Date("2004-01-01"), as.Date("2025-02-01")),
-    date_breaks = "3 years",
+    date_breaks = "2 years",
     date_labels = "%Y",
     expand = c(0,0)
-  ) +
+  ) + coord_cartesian(ylim = c(-.2,.15)) +
   scale_y_continuous(
-    limits = c(-.170, .150),
-    expand = c(0,0), 
-    breaks = c(seq(-.170, .150, .05), .150), 
-    labels = function(x) paste0(x, "%")
-  ) +
+#     limits = c(-.3,.15),
+   breaks = seq(-.2,.15,.05), 
+     expand = c(0,0), 
+    labels = function(x) sprintf("%.1f%%", x * 100)  # Format to 1 decimal place
+) +
   geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
-  
-  # Annotations positioned between lines
+  # Annotations positioned within plot range
   annotate("text",
            x = recession_start + (recession_end - recession_start)/2,  # Middle of financial crisis
-           y = 0.140,
+           y = .1,  # Adjusted within y-limits
            label = "Great Recession\n(Financial Crisis)",
            color = "darkred",
            fontface = "bold",
-           size = 2.5) +
+           size = 3) +
   
   annotate("text",
            x = covid_start + (covid_end - covid_start)/2,  # Middle of COVID recession
-           y = 0.140,
-           label = "COVID\nRecession",
+           y = .1,  # Adjusted within y-limits
+           label = "COVID",
            color = "black",
            fontface = "bold",
-           size = 2.5) +
-  
-  annotate("text",
-           x = covid_end + (covid_final - covid_end)/2,  # Middle of COVID period
-           y = 0.140,
-           label = "COVID Period",
-           color = "black",
-           fontface = "bold",
-           size = 2.5) +
-  
+           size = 3) +
   labs(
     title = "IYW Monthly Returns",
     subtitle = "Period: 2004-2025",
@@ -212,7 +160,6 @@ ishare_rets |>
     axis.title.y.right = element_text(face = "bold", color = "black", angle = 90),
     legend.position = "none"
   )
-  
   
 ```
 ### IDU Utilites 
