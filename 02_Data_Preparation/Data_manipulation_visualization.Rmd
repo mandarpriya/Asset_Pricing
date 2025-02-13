@@ -1364,10 +1364,10 @@ con_staples_rets |>
     date_breaks = "2 years",
     date_labels = "%Y",
     expand = c(0,0)
-  ) + coord_cartesian(ylim = c(-.15,.15)) +
+  ) + coord_cartesian(ylim = c(-.15,.10)) +
   scale_y_continuous(
 #     limits = c(-.3,.15),
-   breaks = seq(-.15,.15,.05), 
+   breaks = seq(-.15,.10,.05), 
      expand = c(0,0), 
     labels = function(x) sprintf("%.1f%%", x * 100)  # Format to 1 decimal place
 ) +
@@ -1375,7 +1375,7 @@ con_staples_rets |>
   # Annotations positioned within plot range
   annotate("text",
            x = recession_start + (recession_end - recession_start)/2,  # Middle of financial crisis
-           y = .12,  # Adjusted within y-limits
+           y = .09,  # Adjusted within y-limits
            label = "Great Recession\n(Financial Crisis)",
            color = "darkred",
            fontface = "bold",
@@ -1383,7 +1383,7 @@ con_staples_rets |>
   
   annotate("text",
            x = covid_start + (covid_end - covid_start)/2,  # Middle of COVID recession
-           y = .12,  # Adjusted within y-limits
+           y = .09,  # Adjusted within y-limits
            label = "COVID",
            color = "black",
            fontface = "bold",
@@ -1490,7 +1490,7 @@ health_rets |>
 
 ```
 
-S&P 500 Real Estate (Sector) (^SP500-60)
+###S&P 500 Real Estate (Sector) (^SP500-60)
 ```{r}
 real_estate_rets <- readRDS("/Users/mandarphatak/Documents/GitHub/Asset_Pricing/00_Data/sp500_sector_rets.rds") |> filter(symbol == "^SP500-60")
 
@@ -1566,88 +1566,163 @@ real_estate_rets |>
 ```
 
 
-S&P 500 Consumer Discretionary (^SP500-25)
+###S&P 500 Consumer Discretionary (^SP500-25)
 ```{r}
+cons_disc_rets <- readRDS("/Users/mandarphatak/Documents/GitHub/Asset_Pricing/00_Data/sp500_sector_rets.rds") |> filter(symbol == "^SP500-25")
 
-```
+recession_start <- as.Date("2007-12-01")
+recession_end <- as.Date("2010-01-01")  # Extended to cover early 2010
+covid_start <- as.Date("2020-02-01")
+covid_end <- as.Date("2023-05-01")
 
-S&P 500 Utilities (Sector)(^SP500-55)
-```{r}
-
-```
-
-
-
-
-
-
-### Lets see how much investment 
-
-```{r}
-library(ggplot2)
-library(dplyr)
-
-# Calculate cumulative returns
-plot_investment_growth <- function(data) {
-  growth_data <- data |>
-    mutate(
-      cum_return = cumprod(1 + returns),  # Calculate cumulative returns
-      investment_value = cum_return       # Assuming $1 initial investment
-    )
+cons_disc_rets |> 
+  ggplot(aes(date, returns)) + 
+  geom_rect(aes(xmin = recession_start, xmax = recession_end, ymin = -Inf, ymax = Inf),
+            fill = "red", alpha = 0.2) +  # Light shading for recession
+  # COVID rectangle
+  geom_rect(aes(xmin = covid_start, xmax = covid_end, ymin = -Inf, ymax = Inf),
+            fill = "#89CFF0", alpha = 0.2) +  # Light shading for COVID
   
-  # Create the plot
-  ggplot(growth_data, aes(x = date, y = investment_value)) +
-    geom_line(color = "#2c3e50", size = 1) +
-    
-    labs(
-      title = "Growth of $1 Investment in S&P 500 Technology Sector",
-      x = "Date",
-      y = "Investment Value ($)",
-      caption = "Data source: Yahoo Finance"
-    ) +
-    theme_minimal() +
-    theme(
-      plot.title = element_text(size = 14, face = "bold"),
-      axis.title = element_text(size = 12),
-      panel.grid.minor = element_blank()
-    ) +
-    scale_y_continuous(labels = scales::dollar_format()) +
-    scale_x_date(date_breaks = "2 years", date_labels = "%Y")
-}
-
-# Generate the plot
- plot_investment_growth(tech_rets)
-```
-```{r}
-plot_investment_growth <- function(data) {
-  growth_data <- data |>
-    mutate(
-      cum_return = cumprod(1 + returns),  # Calculate cumulative returns
-      investment_value = cum_return       # Assuming $1 initial investment
-    )
+  geom_line(col = "#034694",linewidth = 0.7) +
+  scale_x_date(
+    limits = c(as.Date("2004-01-01"), as.Date("2025-02-01")),
+    date_breaks = "2 years",
+    date_labels = "%Y",
+    expand = c(0,0)
+  ) + coord_cartesian(ylim = c(-.20,.20)) +
+  scale_y_continuous(
+#     limits = c(-.3,.15),
+   breaks = seq(-.20,.20,.05), 
+     expand = c(0,0), 
+    labels = function(x) sprintf("%.1f%%", x * 100)  # Format to 1 decimal place
+) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  # Annotations positioned within plot range
+  annotate("text",
+           x = recession_start + (recession_end - recession_start)/2,  # Middle of financial crisis
+           y = .15,  # Adjusted within y-limits
+           label = "Great Recession\n(Financial Crisis)",
+           color = "darkred",
+           fontface = "bold",
+           size = 3) +
   
-  # Create the plot
-  ggplot(growth_data, aes(x = date, y = investment_value)) +
-    geom_line(color = "#2c3e50", size = 1) +
-    labs(
-      title = "Growth of $1 Investment in IYW ",
-      x = "Date",
-      y = "Investment Value ($)",
-      caption = "Data source: Yahoo Finance"
-    ) +
-    theme_minimal() +
-    theme(
-      plot.title = element_text(size = 14, face = "bold"),
-      axis.title = element_text(size = 12),
-      panel.grid.minor = element_blank()
-    ) +
-    scale_y_continuous(labels = scales::dollar_format()) +
-    scale_x_date(date_breaks = "2 years", date_labels = "%Y")
-}
+  annotate("text",
+           x = covid_start + (covid_end - covid_start)/2,  # Middle of COVID recession
+           y = .15,  # Adjusted within y-limits
+           label = "COVID",
+           color = "black",
+           fontface = "bold",
+           size = 3) +
+  labs(
+    title = "S&P 500 Consumer Discretionary Monthly Returns",
+    subtitle = "Period: 2004-2025",
+    caption = "Source:-Yahoo Finance",
+    x = "",
+    y = ""
+  ) +
+  theme(
+    plot.title.position = "plot",
+    plot.title = element_text(hjust = 0, face = "bold", colour = "black"),
+    plot.subtitle = element_text(hjust = 0, face = "bold", colour = "black"),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold", color = "black"),
+    axis.text.y = element_text(face = "bold", color = "black"),
+    axis.title = element_text(face = "bold", color = "black"),
+    axis.line = element_line(color = "black", linewidth = 1),
+    panel.background = element_rect(fill = "grey", color = NA),
+    plot.background = element_rect(fill = "grey", color = NA),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_line(color = "lightgrey", linewidth = 0.5),
+    axis.line.y.right = element_line(color = "black", linewidth = 1),
+    axis.text.y.right = element_text(face = "bold", color = "black"),
+    axis.title.y.right = element_text(face = "bold", color = "black", angle = 90),
+    legend.position = "none"
+  )
 
-# Generate the plot
-plot_investment_growth(ishare_rets |> filter(symbol == "IYW"))
+
 ```
 
-# 
+###S&P 500 Utilities (Sector)(^SP500-55)
+```{r}
+utilities_rets <- readRDS("/Users/mandarphatak/Documents/GitHub/Asset_Pricing/00_Data/sp500_sector_rets.rds") |> filter(symbol == "^SP500-55")
+
+recession_start <- as.Date("2007-12-01")
+recession_end <- as.Date("2010-01-01")  # Extended to cover early 2010
+covid_start <- as.Date("2020-02-01")
+covid_end <- as.Date("2023-05-01")
+
+utilities_rets |> 
+  ggplot(aes(date, returns)) + 
+  geom_rect(aes(xmin = recession_start, xmax = recession_end, ymin = -Inf, ymax = Inf),
+            fill = "red", alpha = 0.2) +  # Light shading for recession
+  # COVID rectangle
+  geom_rect(aes(xmin = covid_start, xmax = covid_end, ymin = -Inf, ymax = Inf),
+            fill = "#89CFF0", alpha = 0.2) +  # Light shading for COVID
+  
+  geom_line(col = "#034694",linewidth = 0.7) +
+  scale_x_date(
+    limits = c(as.Date("2004-01-01"), as.Date("2025-02-01")),
+    date_breaks = "2 years",
+    date_labels = "%Y",
+    expand = c(0,0)
+  ) + coord_cartesian(ylim = c(-.15,.15)) +
+  scale_y_continuous(
+#     limits = c(-.3,.15),
+   breaks = seq(-.15,.15,.05), 
+     expand = c(0,0), 
+    labels = function(x) sprintf("%.1f%%", x * 100)  # Format to 1 decimal place
+) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  # Annotations positioned within plot range
+  annotate("text",
+           x = recession_start + (recession_end - recession_start)/2,  # Middle of financial crisis
+           y = .12,  # Adjusted within y-limits
+           label = "Great Recession\n(Financial Crisis)",
+           color = "darkred",
+           fontface = "bold",
+           size = 3) +
+  
+  annotate("text",
+           x = covid_start + (covid_end - covid_start)/2,  # Middle of COVID recession
+           y = .12,  # Adjusted within y-limits
+           label = "COVID",
+           color = "black",
+           fontface = "bold",
+           size = 3) +
+  labs(
+    title = "S&P 500 Utilities Monthly Returns",
+    subtitle = "Period: 2004-2025",
+    caption = "Source:-Yahoo Finance",
+    x = "",
+    y = ""
+  ) +
+  theme(
+    plot.title.position = "plot",
+    plot.title = element_text(hjust = 0, face = "bold", colour = "black"),
+    plot.subtitle = element_text(hjust = 0, face = "bold", colour = "black"),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold", color = "black"),
+    axis.text.y = element_text(face = "bold", color = "black"),
+    axis.title = element_text(face = "bold", color = "black"),
+    axis.line = element_line(color = "black", linewidth = 1),
+    panel.background = element_rect(fill = "grey", color = NA),
+    plot.background = element_rect(fill = "grey", color = NA),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_line(color = "lightgrey", linewidth = 0.5),
+    axis.line.y.right = element_line(color = "black", linewidth = 1),
+    axis.text.y.right = element_text(face = "bold", color = "black"),
+    axis.title.y.right = element_text(face = "bold", color = "black", angle = 90),
+    legend.position = "none"
+  )
+
+
+```
+
+##### End of Stage 1:- Visualization of the Time Series Plot for S&P 500 Sectoral indices
+
+
+
+
+
+
+
+
 
