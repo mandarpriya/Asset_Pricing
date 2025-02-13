@@ -1716,7 +1716,9 @@ utilities_rets |>
 
 ```
 
-##### End of Stage 1:- Visualization of the Time Series Plot for S&P 500 Sectoral indices
+##### End of Stage 1 :- Visualization of the Time Series Plot for Sectoral ETFs and S&P 500 Sectoral indices, and understanding the trends, events.
+
+The next step is the modeling:- We will start with the CAPM model, for this we combine the fama french 3 factors data with the sectoral etfs returns data, and the same with the S&P 500 sectoral indices. We use the rolling window concept to obtain the ßeta
 
 
 
