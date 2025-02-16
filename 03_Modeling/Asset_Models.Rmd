@@ -62,6 +62,50 @@ data %>%
     map(summary) 
      
 ```
+## Another way of the same model
+```{r}
+library(tidyverse)
+library(broom)
+# Focusing on estimates (ßeta, so we have used the tidy)
+data  %>% 
+nest() %>% 
+mutate(models = map(data, ~ lm(ishares_ret~sp500_ret+0, data = .x))) %>% 
+mutate(summaries = map(models, tidy)) %>% 
+unnest(summaries) 
 
+```
+
+# We can repeat the same using Fama-French single factor
+
+
+```{r}
+ff_mkt <- readRDS(file = "/Users/mandarphatak/Documents/Github/Asset_Pricing/00_Data/factors_ff3_monthly.rds") |> 
+  select(date,mkt_excess,rf)
+
+data <- ishares_rets |> left_join(ff_mkt, by = "date") |> 
+  mutate(ishares_ret = ishares_ret -rf) |> 
+  select(-rf)
+
+#CAPM model (Single Factor Model)
+ data %>%
+     split(.$symbol) %>% # from base R
+   map(~ lm(ishares_ret ~ mkt_excess, data = .)) %>%
+   map(summary) 
+     
+
+```
+
+
+### So in the above we have the summary of the ususal CAPM model using S&P 500 Returns and Single Factor (Fama French model). The results are similar. So now we extend this setup for Rolling window estimation and use a more robust model which is Fama-French 3 factor model.
+
+Theory:-
+The Fama and French Three-Factor Model (or the Fama French Model for short) is an asset pricing model developed in 1992 that expands on the capital asset pricing model (CAPM) by adding size risk and value risk factors to the market risk factor in CAPM. This model considers the fact that value and small-cap stocks outperform markets on a regular basis. By including these two additional factors, the model adjusts for this outperforming tendency, which is thought to make it a better tool for evaluating manager performance.
+
+# We here use the rolling window (Recursive) this helps to understand the trends over the period of time.
+## Motivation:- Tidy Finance with R
+
+```{r}
+
+```
 
 
