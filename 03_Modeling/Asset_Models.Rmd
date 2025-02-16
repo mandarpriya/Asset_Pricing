@@ -226,7 +226,7 @@ beta_estimate_tbl %>%
 
 ## Fama-French 3 Factor Model :- 
 ```{r}
-
+factors_ff3_monthly <- readRDS(file = file.choose())
 
 ```
 
