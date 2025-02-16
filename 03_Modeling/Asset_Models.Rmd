@@ -222,3 +222,11 @@ beta_estimate_tbl %>%
 
 ## Analysis for the Beta estimation from the above visualization:- After 2020,most of the sectoral ETFS experienced an upward trend. the ßetas for IDU,IYH, IYK,IYZ are positive but less than 1.Which means that these ETFS don't move with the market. In other words β is the exposure to changes in the value of the Market and for these ETFs carry lower risk.ETFS like IYE, IYR, IYW , IYC, IYM, IYF also witness a upward trend and their ßs are around 1. So which menans their movements is with the market movements. So in comparison these are a little bit higher risk. So if the S&P 500 is down then these ETFs will also be facing a downward trend.  
 ### Note :- The Above analysis is based on single factor. So We now extend it to three factor model, which was proposed by Fama-French in 1992. 
+
+
+## Fama-French 3 Factor Model :- 
+```{r}
+
+
+```
+
