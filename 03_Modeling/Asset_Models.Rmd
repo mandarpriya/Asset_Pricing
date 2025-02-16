@@ -290,4 +290,61 @@ beta_estimate_tbl <- data |>
 
 beta_estimate_tbl
 ```
+## Very interesting results:- ß_mkt has increased  due to inclusion of the other two factors. 
+### Visualization the Beta_mkt for the three factor model
+```{r}
+beta_estimate_tbl |> 
+  select(symbol, date, ß_mkt) |> 
+  ggplot(aes(date,ß_mkt, colour = symbol, linetype = symbol)) +
+  geom_line() +
+  scale_x_date(
+    limits = c(as.Date("2007-01-01"), as.Date("2025-02-01")),
+    date_breaks = "3 years",
+    date_labels = "%Y",
+    expand = c(0,0)
+    
+              
+  ) + coord_cartesian(xlim = c(as.Date("2007-12-01"),as.Date("2025-02-01"))) +
+  scale_y_continuous(limits = c(0,1.8), breaks = seq(0,1.8, by = 0.1), 
+                     expand = c(0,0) ) +
+  labs(
+    x = NULL, y = NULL, color = NULL, linetype = NULL,
+    title = "Monthly beta estimates for iShares Sectoral ETFs\nusing 5 years of data"
+  ) +
+  theme(
+       plot.title.position = "plot",
+        plot.title = element_text(hjust = 0, face = "bold", colour = "black"),
+        plot.subtitle = element_text(hjust = 0, face = "bold", colour = "black"),
+        axis.text.x = element_text(angle = 45, hjust = 1, face = "bold", color = "black"),
+        axis.text.y = element_text(face = "bold", color = "black"),
+        axis.title = element_text(face = "bold", color = "black"),
+        axis.line = element_line(color = "black", linewidth  = 1),
+        panel.background = element_rect(),
+        plot.background = element_rect(fill = "grey", color = NA),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(color = "lightgrey", linewidth  = 0.5),
+        axis.line.y.right = element_line(color = "black", linewidth  = 1),
+        axis.text.y.right = element_text(face = "bold", color = "black"),
+        axis.title.y.right = element_text(face = "bold", color = "black", angle = 90)
+       )
+```
+### Clearly the ß for all but IYH the sectoral ETFs are on the rising trend from 2020 onwards. Most of the ß for ETFs is near one which is an improvement over the single factor model. 
+### For dynamic plot we use the timetk library
+```{r}
+beta_estimate_tbl %>%
+    plot_time_series(
+        .date_var = date,
+        .value = ß_mkt,
+        .color_var = symbol,
+        .smooth = FALSE,
+        .title = "Rolling Beta With 5 years of Data",
+        .x_lab = "",
+        .y_lab = "Beta",
+        .legend_show = FALSE,
+        #.plotly_slider = TRUE
+    )
+```
+# From the dynamic plot we can clearly see that IYR had strong upward movedment after 2020,followed by IDU. What is interesting is that all the ß for sectoral ETFs started around 1 from 2008 and ended near 1 at the end of 2024/2025(Feb). We can see that 2010-2012 has been the period post financial criss the movements of these indices was in line with the movement of the market index, after 2014 onwardds we start see ing the diveregence for a few sectoral indices till 2020 . 2020 onwards the course of divergence seems to have been corrected.
 
+
+#### Extension of Fama-French with 5 factors and then followed by including the  traded factor (momentum):- 
