@@ -26,15 +26,42 @@ The three-month U.S. Treasury bill is a useful proxy because the market consider
 Beta compares a security or portfolio's volatility or systematic risk to the market. If a stock is riskier than the market, it will have a beta greater than one. If a stock has a beta of less than one, the formula assumes it will reduce the risk of a portfolio.
 
 
-#We use the fama-french market factor to represent the ERm, we could have use the S&P 500 for the same. 
-# The risk free rate is take from the fama-french data. 
+#We use the S&P 500 to represent the ERm, we could also use the fama-french single factor  for the same. 
+# The risk free rate is taken from the fama-french data. 
+
+CAPM model :-  
 ```{r}
+## Prequisite Library
+library(tidyquant)
+library(tidyverse)
 
 ```
 
-
+# Step1:- Downloading the data for S&P 500 from yahoo finance
 ```{r}
-
+sp500 <- tq_get("^GSPC", get = "stock.prices", from = "2004-01-01")
+sp500_rets <- sp500 |> 
+  tq_transmute(select = adjusted,
+               mutate_fun = periodReturn,
+               period = "monthly",
+               col_rename = "sp500_ret") |> 
+  mutate(date = rollback(date,roll_to_first = TRUE))
+saveRDS(sp500_rets, file = "/Users/mandarphatak/Documents/Github/Asset_Pricing/00_Data/sp500_rets.rds")
 ```
+# Step 2:- Implementing the CAPM model
+```{r}
+ishares_rets <- readRDS(file = "/Users/mandarphatak/Documents/Github/Asset_Pricing/00_Data/ishares_rets.rds")
+sp500_rets <- readRDS( file = "/Users/mandarphatak/Documents/Github/Asset_Pricing/00_Data/sp500_rets.rds")
+
+data <- ishares_rets |> left_join(sp500_rets, by = "date")
+
+#CAPM model
+data %>%
+     split(.$symbol) %>% # from base R
+    map(~ lm(ishares_ret ~ sp500_ret, data = .)) %>%
+    map(summary) 
+     
+```
+
 
 
