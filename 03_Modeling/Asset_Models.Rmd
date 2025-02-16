@@ -226,7 +226,68 @@ beta_estimate_tbl %>%
 
 ## Fama-French 3 Factor Model :- 
 ```{r}
-factors_ff3_monthly <- readRDS(file = file.choose())
+# Step 1:- data preparation
+factors_ff3_monthly <-  readRDS("/Users/mandarphatak/Documents/GitHub/Asset_Pricing/00_Data/factors_ff3_monthly.rds")
+data <- ishares_rets |> 
+  group_by(symbol) |> 
+  left_join(factors_ff3_monthly, by = "date") |> 
+  mutate(ishares_ret = ishares_ret -rf) |> 
+  select(-rf)
+```
 
+
+```{r}
+# Step 2:- Rolling window function for CAPM
+library(slider)
+estimate_capm <- function(data, min_obs = 1) {
+if (nrow(data) < min_obs) {
+regression_coefficients <- tibble(term = c("(Intercept)", "mkt_excess","smb","hml"), 
+                                  estimate = NA)
+} else { # no intercept
+fit <- lm(ishares_ret ~  mkt_excess+smb+hml-1 , data = data)
+regression_coefficients <- broom::tidy(fit) |> select(term, estimate)
+}
+return(regression_coefficients)
+}
+# rolling capm estimation
+roll_capm_estimation <- function(data, months, min_obs) {
+data <- data |>
+arrange(date)
+
+betas <- slide_period(
+.x = data,
+.i = data$date,
+.period = "month",
+.f = ~ estimate_capm(., min_obs),
+.before = months - 1,
+.complete = FALSE
+)
+
+return(tibble(
+date = unique(data$date),
+beta = betas
+))
+}
+```
+
+
+```{r}
+# Step 3:- Estimation
+beta_estimate_tbl <- data |> 
+  mutate(roll_capm_estimation(
+    pick(date,  ishares_ret,  mkt_excess,smb, hml), 
+    months = 60 , min_obs = 48)
+  ) |> 
+  select(symbol, date, beta) |> 
+  unnest(beta) |> 
+  filter(term !="(Intercept)") |> 
+  drop_na() |> 
+  ungroup() |> 
+  pivot_wider(names_from = term, values_from = estimate) |> 
+  rename(ß_mkt = mkt_excess,
+         ß_smb = smb,
+         ß_hml = hml)
+
+beta_estimate_tbl
 ```
 
