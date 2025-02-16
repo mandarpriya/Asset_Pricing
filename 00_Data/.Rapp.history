@@ -1,1 +1,2 @@
 load("/Users/mandarphatak/Documents/GitHub/Asset_Pricing/00_Data/vang_prices.rds")
+load("/Users/mandarphatak/Documents/GitHub/Asset_Pricing/00_Data/beta_estimate_tbl.rds")

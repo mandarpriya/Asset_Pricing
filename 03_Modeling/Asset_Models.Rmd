@@ -104,8 +104,119 @@ The Fama and French Three-Factor Model (or the Fama French Model for short) is a
 # We here use the rolling window (Recursive) this helps to understand the trends over the period of time.
 ## Motivation:- Tidy Finance with R
 
+# Single factor model:- Using market factor
 ```{r}
+### Step1
+library(slider)
+# function for estimating capm
+estimate_capm <- function(data, min_obs = 1) {
+  if (nrow(data) < min_obs) {
+    beta <- as.numeric(NA)
+  } else {
+    fit <- lm(ishares_ret ~ mkt_excess, data = data)
+    beta <- as.numeric(coefficients(fit)[2])
+  }
+  return(beta)
+}
+#function for rolling window capm 
+roll_capm_estimation <- function(data, months, min_obs) {
+  data <- data |>
+    arrange(date)
 
+  betas <- slide_period_vec(
+    .x = data,
+    .i = data$date,
+    .period = "month",
+    .f = ~ estimate_capm(., min_obs),
+    .before = months - 1,
+    .complete = FALSE
+  )
+
+  return(tibble(
+    date = unique(data$date),
+    beta = betas
+  ))
+}
+```
+```{r}
+### Step2:- From the previous step we use the dat
+beta_estimate_tbl <- data  |> 
+  group_by(symbol) |> 
+  mutate(roll_capm_estimation(
+    pick(date, ishares_ret, mkt_excess), 
+    months = 60 , min_obs = 48)
+  ) |>
+  ungroup() |> 
+  select(symbol, date, beta) |> 
+  drop_na()
+
+# saveRDS(beta_estimate_tbl, file = "/Users/mandarphatak/Documents/Github/Asset_Pricing/00_Data/beta_estimate_tbl.rds")
+```
+
+## Visualiaztion of the results
+```{r}
+beta_estimate_tbl |> 
+  group_by(symbol) |> 
+  ggplot(aes(
+    x = date, 
+    y = beta, 
+    color = symbol,
+    linetype = symbol)) +
+  geom_line() +
+  scale_x_date(
+    limits = c(as.Date("2007-01-01"), as.Date("2025-02-01")),
+    date_breaks = "3 years",
+    date_labels = "%Y",
+    expand = c(0,0)
+    
+              
+  ) + coord_cartesian(xlim = c(as.Date("2007-12-01"),as.Date("2025-02-01"))) +
+  scale_y_continuous(limits = c(0,1.8), breaks = seq(0,1.8, by = 0.1), 
+                     expand = c(0,0) ) +
+  labs(
+    x = NULL, y = NULL, color = NULL, linetype = NULL,
+    title = "Monthly beta estimates for iShares Sectoral ETFs\nusing 5 years of data"
+  ) +
+  theme(
+    plot.title.position = "plot",
+    theme(
+       plot.title.position = "plot",
+        plot.title = element_text(hjust = 0, face = "bold", colour = "black"),
+        plot.subtitle = element_text(hjust = 0, face = "bold", colour = "black"),
+        axis.text.x = element_text(angle = 45, hjust = 1, face = "bold", color = "black"),
+        axis.text.y = element_text(face = "bold", color = "black"),
+        axis.title = element_text(face = "bold", color = "black"),
+        axis.line = element_line(color = "black", linewidth  = 1),
+        panel.background = element_rect(fill = "grey", color = NA),
+        plot.background = element_rect(fill = "grey", color = NA),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(color = "lightgrey", linewidth  = 0.5),
+        axis.line.y.right = element_line(color = "black", linewidth  = 1),
+        axis.text.y.right = element_text(face = "bold", color = "black"),
+        axis.title.y.right = element_text(face = "bold", color = "black", angle = 90)
+        
+    ) 
+
+  )
+```
+## We can enhance the visualization using modeltime & timetk library
+```{r}
+library(modeltime)
+library(timetk)
+beta_estimate_tbl %>%
+    plot_time_series(
+        .date_var = date,
+        .value = beta,
+        .color_var = symbol,
+        .smooth = FALSE,
+        .title = "Rolling Beta With 5 years of Data",
+        .x_lab = "",
+        .y_lab = "Beta",
+        .legend_show = FALSE,
+        #.plotly_slider = TRUE
+    )
 ```
 
 
+## Analysis for the Beta estimation from the above visualization:- After 2020,most of the sectoral ETFS experienced an upward trend. the ßetas for IDU,IYH, IYK,IYZ are positive but less than 1.Which means that these ETFS don't move with the market. In other words β is the exposure to changes in the value of the Market and for these ETFs carry lower risk.ETFS like IYE, IYR, IYW , IYC, IYM, IYF also witness a upward trend and their ßs are around 1. So which menans their movements is with the market movements. So in comparison these are a little bit higher risk. So if the S&P 500 is down then these ETFs will also be facing a downward trend.  
+### Note :- The Above analysis is based on single factor. So We now extend it to three factor model, which was proposed by Fama-French in 1992. 
