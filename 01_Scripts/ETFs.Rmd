@@ -99,10 +99,21 @@ write.csv(vang_prices, file = "/Users/mandarphatak/Documents/GitHub/Asset_Pricin
 
 #saving as rds file
 saveRDS(vang_prices, file = "/Users/mandarphatak/Documents/GitHub/Asset_Pricing/00_Data/vang_prices.rds")
+```
 
 
+```{r}
+vang_rets <- vang_prices |> 
+  group_by(symbol) |> 
+  tq_transmute(
+    select = adjusted,
+    mutate_fun = periodReturn,
+    period = "monthly",
+    col_rename = "vang_ret"
+    ) |> 
+  mutate(date=rollback(date,roll_to_first = TRUE))
 
-
+saveRDS(vang_rets, file ="/Users/mandarphatak/Documents/GitHub/Asset_Pricing/00_Data/vang_rets.rds")
 ```
 
 ## Downloading the data for  
@@ -142,6 +153,20 @@ ishares_prices |>
 
 saveRDS(ishares_prices, file = "/Users/mandarphatak/Documents/Github/Asset_Pricing/00_Data/ishares_prices.rds")
 write_csv(ishares_prices,file = "/Users/mandarphatak/Documents/GitHub/Asset_Pricing/00_Data/ishares.csv")
+```
+
+
+```{r}
+ishares_rets <- ishares_prices |> 
+  group_by(symbol) |> 
+  tq_transmute(
+    select = adjusted,
+    mutate_fun = periodReturn,
+    col_rename = "ishares_ret"
+  ) |> 
+  mutate(date=rollback(date,roll_to_first = TRUE))
+saveRDS(ishares_rets, file = "/Users/mandarphatak/Documents/Github/Asset_Pricing/00_Data/ishares_rets.rds")
+  
 ```
 # Sectoral Index S&P 500
 
