@@ -1,0 +1,388 @@
+---
+title: "Asset_Modeling"
+author: "Mandar"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup}
+knitr::opts_chunk$set(cache = TRUE, cache.lazy = FALSE, warning = FALSE,
+                      message = FALSE,echo = TRUE, dpi = 360, warning = FALSE,
+                      fig.width = 10, fig.height = 8)
+```
+##First of the Asset Pricing models is the  CAPM model:- 
+The capital asset pricing model (CAPM) was developed in the early 1960s by financial economists William Sharpe, Jack Treynor, John Lintner, and Jan Mossin, who built their work on ideas put forth by Harry Markowitz in the 1950s.
+CAPM is based on the relationship between an asset’s beta, the risk-free rate (typically the Treasury bill rate), and the equity risk premium, or the expected return on the market minus the risk-free rate.
+CAPM evolved as a way to measure this systematic risk. It is widely used throughout finance for pricing risky securities and generating expected returns for assets, given the risk of those assets and cost of capital.
+ERi   =  Rf +ßi (ERm−Rf)
+where:ERi  = Expected Return of investment
+Rf = Risk Free Rate 
+ßi =   Beta of the investment
+(ERm – Rf) = market risk premium
+
+The risk free rate (Rf) is mostly the treasury rate, in US context
+The three-month U.S. Treasury bill is a useful proxy because the market considers there to be virtually no chance of the U.S. government defaulting on its obligations. The large size and deep liquidity of the market contribute to the perception of safety.
+
+Beta compares a security or portfolio's volatility or systematic risk to the market. If a stock is riskier than the market, it will have a beta greater than one. If a stock has a beta of less than one, the formula assumes it will reduce the risk of a portfolio.
+
+
+#We use the S&P 500 to represent the ERm, we could also use the fama-french single factor  for the same. 
+# The risk free rate is taken from the fama-french data. 
+
+CAPM model :-  
+```{r}
+## Prequisite Library
+library(tidyquant)
+library(tidyverse)
+
+```
+
+# Step1:- Downloading the data for S&P 500 from yahoo finance
+```{r}
+sp500 <- tq_get("^GSPC", get = "stock.prices", from = "2004-01-01")
+sp500_rets <- sp500 |> 
+  tq_transmute(select = adjusted,
+               mutate_fun = periodReturn,
+               period = "monthly",
+               col_rename = "sp500_ret") |> 
+  mutate(date = rollback(date,roll_to_first = TRUE))
+saveRDS(sp500_rets, file = "/Users/mandarphatak/Documents/Github/Asset_Pricing/00_Data/sp500_rets.rds")
+```
+# Step 2:- Implementing the CAPM model
+```{r}
+ishares_rets <- readRDS(file = "/Users/mandarphatak/Documents/Github/Asset_Pricing/00_Data/ishares_rets.rds")
+sp500_rets <- readRDS( file = "/Users/mandarphatak/Documents/Github/Asset_Pricing/00_Data/sp500_rets.rds")
+
+data <- ishares_rets |> left_join(sp500_rets, by = "date")
+
+#CAPM model
+data %>%
+     split(.$symbol) %>% # from base R
+    map(~ lm(ishares_ret ~ sp500_ret, data = .)) %>%
+    map(summary) 
+     
+```
+## Another way of the same model
+```{r}
+library(tidyverse)
+library(broom)
+# Focusing on estimates (ßeta, so we have used the tidy)
+data  %>% 
+nest() %>% 
+mutate(models = map(data, ~ lm(ishares_ret~sp500_ret+0, data = .x))) %>% 
+mutate(summaries = map(models, tidy)) %>% 
+unnest(summaries) 
+
+```
+
+# We can repeat the same using Fama-French single factor
+
+
+```{r}
+ff_mkt <- readRDS(file = "/Users/mandarphatak/Documents/Github/Asset_Pricing/00_Data/factors_ff3_monthly.rds") |> 
+  select(date,mkt_excess,rf)
+
+data <- ishares_rets |> left_join(ff_mkt, by = "date") |> 
+  mutate(ishares_ret = ishares_ret -rf) |> 
+  select(-rf)
+
+#CAPM model (Single Factor Model)
+ data %>%
+     split(.$symbol) %>% # from base R
+   map(~ lm(ishares_ret ~ mkt_excess, data = .)) %>%
+   map(summary) 
+     
+
+```
+
+
+### So in the above we have the summary of the ususal CAPM model using S&P 500 Returns and Single Factor (Fama French model). The results are similar. So now we extend this setup for Rolling window estimation and use a more robust model which is Fama-French 3 factor model.
+
+Theory:-
+The Fama and French Three-Factor Model (or the Fama French Model for short) is an asset pricing model developed in 1992 that expands on the capital asset pricing model (CAPM) by adding size risk and value risk factors to the market risk factor in CAPM. This model considers the fact that value and small-cap stocks outperform markets on a regular basis. By including these two additional factors, the model adjusts for this outperforming tendency, which is thought to make it a better tool for evaluating manager performance.
+
+# We here use the rolling window (Recursive) this helps to understand the trends over the period of time.
+## Motivation:- Tidy Finance with R
+
+# Single factor model:- Using market factor
+```{r}
+### Step1
+library(slider)
+# function for estimating capm
+estimate_capm <- function(data, min_obs = 1) {
+  if (nrow(data) < min_obs) {
+    beta <- as.numeric(NA)
+  } else {
+    fit <- lm(ishares_ret ~ mkt_excess, data = data)
+    beta <- as.numeric(coefficients(fit)[2])
+  }
+  return(beta)
+}
+#function for rolling window capm 
+roll_capm_estimation <- function(data, months, min_obs) {
+  data <- data |>
+    arrange(date)
+
+  betas <- slide_period_vec(
+    .x = data,
+    .i = data$date,
+    .period = "month",
+    .f = ~ estimate_capm(., min_obs),
+    .before = months - 1,
+    .complete = FALSE
+  )
+
+  return(tibble(
+    date = unique(data$date),
+    beta = betas
+  ))
+}
+
+### Step2:- From the previous step we use the dat
+beta_estimate_tbl <- data  |> 
+  group_by(symbol) |> 
+  mutate(roll_capm_estimation(
+    pick(date, ishares_ret, mkt_excess), 
+    months = 60 , min_obs = 48)
+  ) |>
+  ungroup() |> 
+  select(symbol, date, beta) |> 
+  drop_na()
+
+# saveRDS(beta_estimate_tbl, file = "/Users/mandarphatak/Documents/Github/Asset_Pricing/00_Data/beta_estimate_tbl.rds")
+```
+
+## Visualiaztion of the results
+```{r}
+beta_estimate_tbl |> 
+  group_by(symbol) |> 
+  ggplot(aes(
+    x = date, 
+    y = beta, 
+    color = symbol,
+    linetype = symbol)) +
+  geom_line() +
+  scale_x_date(
+    limits = c(as.Date("2007-01-01"), as.Date("2025-02-01")),
+    date_breaks = "3 years",
+    date_labels = "%Y",
+    expand = c(0,0)
+    
+              
+  ) + coord_cartesian(xlim = c(as.Date("2007-12-01"),as.Date("2025-02-01"))) +
+  scale_y_continuous(limits = c(0,1.8), breaks = seq(0,1.8, by = 0.1), 
+                     expand = c(0,0) ) +
+  labs(
+    x = NULL, y = NULL, color = NULL, linetype = NULL,
+    title = "Monthly beta estimates for iShares Sectoral ETFs\nusing 5 years of data"
+  ) +
+  theme(
+    plot.title.position = "plot",
+    theme(
+       plot.title.position = "plot",
+        plot.title = element_text(hjust = 0, face = "bold", colour = "black"),
+        plot.subtitle = element_text(hjust = 0, face = "bold", colour = "black"),
+        axis.text.x = element_text(angle = 45, hjust = 1, face = "bold", color = "black"),
+        axis.text.y = element_text(face = "bold", color = "black"),
+        axis.title = element_text(face = "bold", color = "black"),
+        axis.line = element_line(color = "black", linewidth  = 1),
+        panel.background = element_rect(fill = "grey", color = NA),
+        plot.background = element_rect(fill = "grey", color = NA),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(color = "lightgrey", linewidth  = 0.5),
+        axis.line.y.right = element_line(color = "black", linewidth  = 1),
+        axis.text.y.right = element_text(face = "bold", color = "black"),
+        axis.title.y.right = element_text(face = "bold", color = "black", angle = 90)
+        
+    ) 
+
+  )
+```
+## We can enhance the visualization using modeltime & timetk library
+```{r}
+library(modeltime)
+library(timetk)
+beta_estimate_tbl %>%
+    plot_time_series(
+        .date_var = date,
+        .value = beta,
+        .color_var = symbol,
+        .smooth = FALSE,
+        .title = "Rolling Beta With 5 years of Data",
+        .x_lab = "",
+        .y_lab = "Beta",
+        .legend_show = FALSE,
+        #.plotly_slider = TRUE
+    )
+
+
+```
+
+
+## Analysis:-  After 2020,most of the sectoral ETFS experienced an upward trend. the ßetas for IDU,IYH, IYK,IYZ are positive but less than 1.Which means that these ETFS don't move with the market. In other words β is the exposure to changes in the value of the Market and for these ETFs carry lower risk.ETFS like IYE, IYR, IYW , IYC, IYM, IYF also witness a upward trend and their ßs are around 1. So which menans their movements is with the market movements. So in comparison these are a little bit higher risk. So if the S&P 500 is down then these ETFs will also be facing a downward trend.  
+#### Note :- The Above analysis is based on single factor. So We now extend it to three factor model, which was proposed by Fama-French in 1992. 
+
+
+## Fama-French 3 Factor Model :- 
+```{r}
+# Step 1:- data preparation
+factors_ff3_monthly <-  readRDS("/Users/mandarphatak/Documents/GitHub/Asset_Pricing/00_Data/factors_ff3_monthly.rds")
+data <- ishares_rets |> 
+  group_by(symbol) |> 
+  left_join(factors_ff3_monthly, by = "date") |> 
+  mutate(ishares_ret = ishares_ret -rf) |> 
+  select(-rf)
+# Step 2:- Rolling window function for CAPM
+library(slider)
+estimate_capm <- function(data, min_obs = 1) {
+if (nrow(data) < min_obs) {
+regression_coefficients <- tibble(term = c("(Intercept)", "mkt_excess","smb","hml"), 
+                                  estimate = NA)
+} else { # no intercept
+fit <- lm(ishares_ret ~  mkt_excess+smb+hml-1 , data = data)
+regression_coefficients <- broom::tidy(fit) |> select(term, estimate)
+}
+return(regression_coefficients)
+}
+# rolling capm estimation
+roll_capm_estimation <- function(data, months, min_obs) {
+data <- data |>
+arrange(date)
+
+betas <- slide_period(
+.x = data,
+.i = data$date,
+.period = "month",
+.f = ~ estimate_capm(., min_obs),
+.before = months - 1,
+.complete = FALSE
+)
+
+return(tibble(
+date = unique(data$date),
+beta = betas
+))
+}
+
+# Step 3:- Estimation
+beta_estimate_tbl <- data |> 
+  mutate(roll_capm_estimation(
+    pick(date,  ishares_ret,  mkt_excess,smb, hml), 
+    months = 60 , min_obs = 48)
+  ) |> 
+  select(symbol, date, beta) |> 
+  unnest(beta) |> 
+  filter(term !="(Intercept)") |> 
+  drop_na() |> 
+  ungroup() |> 
+  pivot_wider(names_from = term, values_from = estimate) |> 
+  rename(ß_mkt = mkt_excess,
+         ß_smb = smb,
+         ß_hml = hml)
+```
+#### Observation Very interesting results:- ß_mkt has increased  due to inclusion of the other two factors. 
+
+### Visualization the Beta_mkt for the three factor model
+```{r}
+beta_estimate_tbl |> 
+  select(symbol, date, ß_mkt) |> 
+  ggplot(aes(date,ß_mkt, colour = symbol, linetype = symbol)) +
+  geom_line() +
+  scale_x_date(
+    limits = c(as.Date("2007-01-01"), as.Date("2025-02-01")),
+    date_breaks = "3 years",
+    date_labels = "%Y",
+    expand = c(0,0)
+    
+              
+  ) + coord_cartesian(xlim = c(as.Date("2007-12-01"),as.Date("2025-02-01"))) +
+  scale_y_continuous(limits = c(0,1.8), breaks = seq(0,1.8, by = 0.1), 
+                     expand = c(0,0) ) +
+  labs(
+    x = NULL, y = NULL, color = NULL, linetype = NULL,
+    title = "Monthly beta estimates for iShares Sectoral ETFs\nusing 5 years of data"
+  ) +
+  theme(
+       plot.title.position = "plot",
+        plot.title = element_text(hjust = 0, face = "bold", colour = "black"),
+        plot.subtitle = element_text(hjust = 0, face = "bold", colour = "black"),
+        axis.text.x = element_text(angle = 45, hjust = 1, face = "bold", color = "black"),
+        axis.text.y = element_text(face = "bold", color = "black"),
+        axis.title = element_text(face = "bold", color = "black"),
+        axis.line = element_line(color = "black", linewidth  = 1),
+        panel.background = element_rect(),
+        plot.background = element_rect(fill = "grey", color = NA),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(color = "lightgrey", linewidth  = 0.5),
+        axis.line.y.right = element_line(color = "black", linewidth  = 1),
+        axis.text.y.right = element_text(face = "bold", color = "black"),
+        axis.title.y.right = element_text(face = "bold", color = "black", angle = 90)
+       )
+```
+### Clearly the ß for all but IYH the sectoral ETFs are on the rising trend from 2020 onwards. Most of the ß for ETFs is near one which is an improvement over the single factor model. 
+### For dynamic plot we use the timetk library
+```{r}
+beta_estimate_tbl %>%
+    plot_time_series(
+        .date_var = date,
+        .value = ß_mkt,
+        .color_var = symbol,
+        .smooth = FALSE,
+        .title = "Rolling Beta With 5 years of Data",
+        .x_lab = "",
+        .y_lab = "Beta",
+        .legend_show = FALSE,
+        #.plotly_slider = TRUE
+    )
+```
+
+###Analysis dynamic plot we can clearly see that IYR had strong upward movedment after 2020,followed by IDU. What is interesting is that all the ß for sectoral ETFs started around 1 from 2008 and ended near 1 at the end of 2024/2025(Feb). We can see that 2010-2012 has been the period post financial criss the movements of these indices was in line with the movement of the market index, after 2014 onwardds we start see ing the diveregence for a few sectoral indices till 2020 . 2020 onwards the course of divergence seems to have been corrected.
+
+
+# Fama-Macbeth Model:- This is the final step of the estimation model. 
+The Fama–MacBeth regression is a method used to estimate parameters for asset pricing models such as the capital asset pricing model (CAPM). The method estimates the betas and risk premia for any risk factors that are expected to determine asset prices.
+
+
+```{r}
+# Step1:-Ensure beta_estimate_tbl has proper column names
+merged_data <- beta_estimate_tbl |> 
+  left_join(data |> select(symbol, date, ishares_ret), by = c("symbol", "date")) |> 
+  rename(excess_return = ishares_ret) |> drop_na()
+merged_data <- merged_data |> 
+  rename(beta_mkt = ß_mkt,beta_smb = ß_smb,beta_hml = ß_hml )
+
+# Step2: Define cross-regression function
+run_cross_sectional_regression <- function(data) {
+  if (nrow(data) == 0) {
+    return(tibble(term = c("beta_mkt", "beta_smb", "beta_hml"), estimate = NA))
+  }
+  fit <- lm(excess_return ~ beta_mkt + beta_smb + beta_hml - 1, data = data)
+  broom::tidy(fit) |> select(term, estimate)
+}
+
+# Step3:-Apply Fama-MacBeth regression to each symbol
+fama_macbeth_results_by_symbol <- merged_data |>
+  group_by(symbol) |>
+  nest() |>
+  mutate(
+    fama_macbeth = map(data, ~ {
+      .x |>
+        group_by(date) |>
+        summarise(results = list(run_cross_sectional_regression(.)))  # Fix .data reference
+    })
+  ) |>
+  unnest(fama_macbeth) |> 
+  unnest(results)
+
+
+  
+```
+
+
+
+
+
+
+#### Extension of Fama-French with 5 factors and then followed by including the  traded factor (momentum):- 
+
+
