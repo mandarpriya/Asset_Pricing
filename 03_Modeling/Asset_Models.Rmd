@@ -137,8 +137,7 @@ roll_capm_estimation <- function(data, months, min_obs) {
     beta = betas
   ))
 }
-```
-```{r}
+
 ### Step2:- From the previous step we use the dat
 beta_estimate_tbl <- data  |> 
   group_by(symbol) |> 
@@ -220,8 +219,8 @@ beta_estimate_tbl %>%
 ```
 
 
-## Analysis for the Beta estimation from the above visualization:- After 2020,most of the sectoral ETFS experienced an upward trend. the ßetas for IDU,IYH, IYK,IYZ are positive but less than 1.Which means that these ETFS don't move with the market. In other words β is the exposure to changes in the value of the Market and for these ETFs carry lower risk.ETFS like IYE, IYR, IYW , IYC, IYM, IYF also witness a upward trend and their ßs are around 1. So which menans their movements is with the market movements. So in comparison these are a little bit higher risk. So if the S&P 500 is down then these ETFs will also be facing a downward trend.  
-### Note :- The Above analysis is based on single factor. So We now extend it to three factor model, which was proposed by Fama-French in 1992. 
+## Analysis:-  After 2020,most of the sectoral ETFS experienced an upward trend. the ßetas for IDU,IYH, IYK,IYZ are positive but less than 1.Which means that these ETFS don't move with the market. In other words β is the exposure to changes in the value of the Market and for these ETFs carry lower risk.ETFS like IYE, IYR, IYW , IYC, IYM, IYF also witness a upward trend and their ßs are around 1. So which menans their movements is with the market movements. So in comparison these are a little bit higher risk. So if the S&P 500 is down then these ETFs will also be facing a downward trend.  
+#### Note :- The Above analysis is based on single factor. So We now extend it to three factor model, which was proposed by Fama-French in 1992. 
 
 
 ## Fama-French 3 Factor Model :- 
@@ -233,10 +232,6 @@ data <- ishares_rets |>
   left_join(factors_ff3_monthly, by = "date") |> 
   mutate(ishares_ret = ishares_ret -rf) |> 
   select(-rf)
-```
-
-
-```{r}
 # Step 2:- Rolling window function for CAPM
 library(slider)
 estimate_capm <- function(data, min_obs = 1) {
@@ -268,10 +263,7 @@ date = unique(data$date),
 beta = betas
 ))
 }
-```
 
-
-```{r}
 # Step 3:- Estimation
 beta_estimate_tbl <- data |> 
   mutate(roll_capm_estimation(
@@ -287,10 +279,9 @@ beta_estimate_tbl <- data |>
   rename(ß_mkt = mkt_excess,
          ß_smb = smb,
          ß_hml = hml)
-
-beta_estimate_tbl
 ```
-## Very interesting results:- ß_mkt has increased  due to inclusion of the other two factors. 
+#### Observation Very interesting results:- ß_mkt has increased  due to inclusion of the other two factors. 
+
 ### Visualization the Beta_mkt for the three factor model
 ```{r}
 beta_estimate_tbl |> 
@@ -344,7 +335,22 @@ beta_estimate_tbl %>%
         #.plotly_slider = TRUE
     )
 ```
-# From the dynamic plot we can clearly see that IYR had strong upward movedment after 2020,followed by IDU. What is interesting is that all the ß for sectoral ETFs started around 1 from 2008 and ended near 1 at the end of 2024/2025(Feb). We can see that 2010-2012 has been the period post financial criss the movements of these indices was in line with the movement of the market index, after 2014 onwardds we start see ing the diveregence for a few sectoral indices till 2020 . 2020 onwards the course of divergence seems to have been corrected.
+
+###Analysis dynamic plot we can clearly see that IYR had strong upward movedment after 2020,followed by IDU. What is interesting is that all the ß for sectoral ETFs started around 1 from 2008 and ended near 1 at the end of 2024/2025(Feb). We can see that 2010-2012 has been the period post financial criss the movements of these indices was in line with the movement of the market index, after 2014 onwardds we start see ing the diveregence for a few sectoral indices till 2020 . 2020 onwards the course of divergence seems to have been corrected.
+
+
+# Fama-Macbeth Model:- This is the final step of the estimation model. 
+The Fama–MacBeth regression is a method used to estimate parameters for asset pricing models such as the capital asset pricing model (CAPM). The method estimates the betas and risk premia for any risk factors that are expected to determine asset prices.
+
+
+```{r}
+
+```
+
+
+
 
 
 #### Extension of Fama-French with 5 factors and then followed by including the  traded factor (momentum):- 
+
+
