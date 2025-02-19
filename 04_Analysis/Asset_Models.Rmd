@@ -56,7 +56,7 @@ sp500_rets <- readRDS( file = "/Users/mandarphatak/Documents/Github/Asset_Pricin
 data <- ishares_rets |> left_join(sp500_rets, by = "date")
 
 #CAPM model
-data %>%
+result <- data %>%
      split(.$symbol) %>% # from base R
     map(~ lm(ishares_ret ~ sp500_ret, data = .)) %>%
     map(summary) 
@@ -88,7 +88,7 @@ data <- ishares_rets |> left_join(ff_mkt, by = "date") |>
 
 
 #CAPM model (Single Factor Model)
- data %>%
+result <-  data %>%
      split(.$symbol) %>% # from base R
    map(~ lm(ishares_ret ~ mkt_excess, data = .)) %>%
    map(summary) 
@@ -226,6 +226,17 @@ beta_estimate_tbl %>%
 # Winsorization: We take care of the extreme values 
 ## Step1:- Removing from daily data
 ```{r}
+symbols <- c("IYW","IYF","IYR",
+"IYH",
+"IYZ",
+"IYC",
+"IYJ",
+"IYE",
+"IDU",
+"IYK",
+"IYM")
+ishares_prices <- tq_get(symbols, get = "stock.prices", from = "2004-01-01")
+
 ishares_winsorized <- ishares_prices |> 
   select(symbol, date, adjusted) |> 
   group_by(symbol) |> 
@@ -296,10 +307,6 @@ roll_capm_estimation <- function(data, months, min_obs) {
 
 # Visualization of beta_w_estimate_tbl (after winsorization)
 ```{r}
-
- 
- 
- 
  beta_w_estimate_tbl |> 
   group_by(symbol) |> 
   ggplot(aes(
@@ -362,10 +369,6 @@ beta_w_estimate_tbl %>%
 
 
 ```
-
-
-
-
 
 
 
