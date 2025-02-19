@@ -142,7 +142,10 @@ symbols <- c("IYW","IYF","IYR",
 "IYK",
 "IYM")
 ishares_prices <- tq_get(symbols, get = "stock.prices", from = "2004-01-01")
- 
+```
+
+
+```{r}
 # date consistency
 ishares_prices |> 
    group_by(symbol) |> 
