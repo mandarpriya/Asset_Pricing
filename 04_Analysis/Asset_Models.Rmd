@@ -640,8 +640,50 @@ fama_macbeth_results_by_symbol <- merged_data |>
   
 ```
 
+## Using winsorization for fama-macbeth
+```{r}
+merged_data <- beta_estimate_tbl |> 
+  left_join(data_w |> select(symbol, date, ishare_ret), by = c("symbol", "date")) |> 
+  rename(excess_return = ishare_ret) |> drop_na()
+merged_data <- merged_data |> 
+  rename(beta_mkt = ß_mkt,beta_smb = ß_smb,beta_hml = ß_hml )
+
+# Step2: Define cross-regression function
+run_cross_sectional_regression <- function(data) {
+  if (nrow(data) == 0) {
+    return(tibble(term = c("beta_mkt", "beta_smb", "beta_hml"), estimate = NA))
+  }
+  fit <- lm(excess_return ~ beta_mkt + beta_smb + beta_hml - 1, data = data)
+  broom::tidy(fit) |> select(term, estimate)
+}
+
+# Step3:-Apply Fama-MacBeth regression to each symbol
+fama_macbeth_results_by_symbol <- merged_data |>
+  group_by(symbol) |>
+  nest() |>
+  mutate(
+    fama_macbeth = map(data, ~ {
+      .x |>
+        group_by(date) |>
+        summarise(results = list(run_cross_sectional_regression(.)))  # Fix .data reference
+    })
+  ) |>
+  unnest(fama_macbeth) |> 
+  unnest(results)
+
+```
 
 
+```{r}
+risk_premium <- fama_macbeth_results_by_symbol |>
+  group_by(symbol, term) |>
+  filter(term == "beta_mkt") |> 
+  summarise(risk_premium = mean(estimate, na.rm = TRUE), .groups = "drop")
+  
+risk_premium
+```
+
+# We see that for most of risk premium((with winsorization) for all the ETFS is -ve and less around zero. Thus less power to explain the effect of factors in explaining the returns for the ETFS. This shows that some other factors from the market are or might be influential in understanding the returns of the sectoral ETFs.
 
 
 
