@@ -679,11 +679,40 @@ risk_premium <- fama_macbeth_results_by_symbol |>
   group_by(symbol, term) |>
   filter(term == "beta_mkt") |> 
   summarise(risk_premium = mean(estimate, na.rm = TRUE), .groups = "drop")
-  
-risk_premium
+```
+## Visualiaztion of Risk Premium
+
+```{r}
+risk_premium |> 
+  ggplot(aes(symbol, risk_premium, col = symbol)) +
+  geom_point() +
+  labs(
+    x = "symbol", y = "", 
+    title = "Risk Premium\niShares Sectoral ETFs",
+    subtitle = "Period:-2007-2025"
+  ) +
+  theme_minimal() +
+theme(
+        plot.title.position = "plot",
+        plot.title = element_text(hjust = 0, face = "bold", colour = "black"),
+        plot.subtitle = element_text(hjust = 0, face = "bold", colour = "black"),
+        axis.text.x = element_text(angle = 45, hjust = 1, face = "bold", color = "black"),
+        axis.text.y = element_text(face = "bold", color = "black"),
+        axis.title = element_text(face = "bold", color = "black"),
+        axis.line = element_line(color = "black", linewidth  = 1),
+        panel.background = element_blank(),
+        plot.background = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(color = "lightgrey", linewidth  = 0.5),
+        axis.line.y.right = element_line(color = "black", linewidth  = 1),
+        axis.text.y.right = element_text(face = "bold", color = "black"),
+        axis.title.y.right = element_text(face = "bold", color = "black", angle = 90),
+        legend.position = "none"
+    )
+        
 ```
 
-# We see that for most of risk premium((with winsorization) for all the ETFS is -ve and less around zero. Thus less power to explain the effect of factors in explaining the returns for the ETFS. This shows that some other factors from the market are or might be influential in understanding the returns of the sectoral ETFs.
+# We see that for most of risk premium((with winsorization) for all the ETFS is -ve and less around zero. Thus less power to explain the effect of factors in explaining the returns for the ETFS. This shows that some other factors  the that are  influential in explakining the returns of the sectoral ETFs.
 
 
 
