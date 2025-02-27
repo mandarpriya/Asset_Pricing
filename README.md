@@ -7,6 +7,9 @@
 ## Extension for this  would be to include the Nasdaq listed companies based on their respective cap and sector , and for S&P 500 / DJIA /...
 
 
+# Currently the R code was added and updated (Winsorization) and Python code will added in a few days. 
+
+
 
 
 
