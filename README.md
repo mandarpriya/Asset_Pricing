@@ -12,6 +12,11 @@ The data for ETFs is from yahoo finance and the Fama-French Factor data is obtai
 Programming is done on Python and code will added in coming  days. 
 
 
+I have added the PYthon file, and added the Sahnken Correction.
+
+Finally completed the Asset_Pricing using Fama-Macbeth model and with Shanken Correction
+
+
 
 
 
