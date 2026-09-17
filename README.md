@@ -16,6 +16,8 @@ I have added the PYthon file, and added the Sahnken Correction.
 
 Finally completed the Asset_Pricing using Fama-Macbeth model and with Shanken Correction
 
+So i guess may be adding sentiments in the analysis for the same
+
 
 
 
