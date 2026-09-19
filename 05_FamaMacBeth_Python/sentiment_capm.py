@@ -163,12 +163,19 @@ def load_pls(path=f"{DATA_DIR}/pls_sentiment_raw.csv"):
 
 def load_goyal_controls(path=f"{DATA_DIR}/goyal_controls_raw.csv"):
     """Predictive-regression control variables from Amit Goyal's updated
-    Welch & Goyal (2008) predictor dataset: real interest rate (T-bill -
-    inflation), term premium (long yield - T-bill), default premium
-    (BAA - AAA), and inflation. NOTE: the paper's Table 2/13 Panel A
-    control set also includes CAY (Lettau-Ludvigson consumption-wealth
-    ratio) -- not in Goyal's file, so it's omitted here; flagged wherever
-    this is used."""
+    Welch & Goyal (2008) predictor dataset: real interest rate, term
+    premium, default premium, inflation.
+
+    Paper's exact definitions (Doukas & Han 2021, footnote 21): real rate
+    = 30-day T-bill return minus inflation (matches here); default
+    premium = BAA - AAA (matches here); term premium = 20-year T-bill
+    MINUS 1-year T-bill (NOT matched here -- Goyal's file has no 1-year
+    T-bill series, only tbl [~3-month] and lty [~20-year govt bond yield],
+    so this uses the standard lty - tbl term spread as an approximation).
+    CAY (Lettau-Ludvigson consumption-wealth ratio) is the paper's 5th
+    control (their own equation notation says Sum_{i=1}^{4} despite the
+    prose listing 5 -- an inconsistency in the paper itself); CAY isn't in
+    Goyal's file and is omitted here."""
     df = pd.read_csv(path)
     df = df.set_index("yyyymm")
     df.index.name = "ym"
@@ -586,6 +593,33 @@ def run_table13(sentiment_kind="pls", threshold="1sd", portfolio_kind="25"):
     panelB = run(sentiment_kind, threshold=threshold, portfolio_kind=portfolio_kind)
 
     return {"panelA_fit": fit, "panelB": panelB}
+
+
+def run_table2():
+    """Table 2 analogue: predictive regression of next-month market excess
+    return on lagged sentiment, Panel A (univariate, Eq.11) and Panel B
+    (with controls -- real rate/term premium/default premium/inflation;
+    CAY omitted, see load_goyal_controls docstring), for all four indices."""
+    print(f"\n{'='*78}\nTABLE 2 analogue -- sentiment predicts next-month market excess return\n{'='*78}")
+    rows_a, rows_b = {}, {}
+    for kind in ["bw", "mcsi", "cbcci", "as"]:
+        fit_a, df_a = predictive_regression(kind, with_controls=False)
+        rows_a[kind.upper()] = {
+            "beta": fit_a.params["sentiment_z"], "t": fit_a.tvalues["sentiment_z"],
+            "R2_pct": 100 * fit_a.rsquared, "T": len(df_a),
+        }
+        fit_b, df_b = predictive_regression(kind, with_controls=True)
+        rows_b[kind.upper()] = {
+            "beta": fit_b.params["sentiment_z"], "t": fit_b.tvalues["sentiment_z"],
+            "R2_pct": 100 * fit_b.rsquared, "T": len(df_b),
+        }
+    panelA = pd.DataFrame(rows_a).T
+    panelB = pd.DataFrame(rows_b).T
+    print("\n-- Panel A: univariate (Eq.11), HAC/Newey-West(3) SEs --")
+    print(panelA.round(4))
+    print("\n-- Panel B: with controls (real rate, term premium[approx], default premium, inflation) --")
+    print(panelB.round(4))
+    return {"panelA": panelA, "panelB": panelB}
 
 
 if __name__ == "__main__":
