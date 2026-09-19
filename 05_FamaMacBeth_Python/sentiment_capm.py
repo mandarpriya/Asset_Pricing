@@ -147,8 +147,36 @@ def load_as():
     return as_idx.rename("sentiment")
 
 
+def load_pls(path=f"{DATA_DIR}/pls_sentiment_raw.csv"):
+    """PLS-based sentiment index (Huang, Jiang, Tu & Zhou, 2015, RFS) --
+    the orthogonalized version, from the officially maintained update
+    (Fuwei Jiang's website, through Dec 2023). This is the paper's Table 13
+    robustness sentiment measure -- an externally-sourced index (built via
+    partial least squares instead of principal components), not something
+    Doukas & Han construct themselves; they just re-use the published
+    series (their footnote 26)."""
+    df = pd.read_csv(path)
+    s = df.set_index("yyyymm")["PLS_SENT_ORTH"]
+    s.index.name = "ym"
+    return s.rename("sentiment")
+
+
+def load_goyal_controls(path=f"{DATA_DIR}/goyal_controls_raw.csv"):
+    """Predictive-regression control variables from Amit Goyal's updated
+    Welch & Goyal (2008) predictor dataset: real interest rate (T-bill -
+    inflation), term premium (long yield - T-bill), default premium
+    (BAA - AAA), and inflation. NOTE: the paper's Table 2/13 Panel A
+    control set also includes CAY (Lettau-Ludvigson consumption-wealth
+    ratio) -- not in Goyal's file, so it's omitted here; flagged wherever
+    this is used."""
+    df = pd.read_csv(path)
+    df = df.set_index("yyyymm")
+    df.index.name = "ym"
+    return df  # real_rate, term_premium, default_premium, inflation
+
+
 _LOADERS = {"mcsi": load_mcsi, "pmi": load_pmi, "bw": load_bw,
-            "cbcci": load_cbcci, "cfnai": load_cfnai, "as": load_as}
+            "cbcci": load_cbcci, "cfnai": load_cfnai, "as": load_as, "pls": load_pls}
 
 
 # ------------------------------------------------------------- panel build --
@@ -510,6 +538,54 @@ def run_anomaly_tables(sentiment_kind="as", threshold="1sd"):
     print(t9.round(4))
 
     return {"table8_state_beta": t8, "pooled_fmb": pooled, "table9": t9}
+
+
+# ------------------------------------------------- predictive regression (Table 2 / 13 Panel A) --
+def predictive_regression(sentiment_kind="mcsi", with_controls=True, horizon=1):
+    """Table 2 / Table 13 Panel A analogue:
+    MktRF_{t+1} = a + b*Sentiment_t + sum(alpha_i * Controls_t) + e_t
+    (HAC/Newey-West SEs, 3 lags). NOTE: the paper's control set is real
+    interest rate, inflation, term premium, default premium, AND CAY
+    (Lettau-Ludvigson consumption-wealth ratio) -- CAY isn't in Goyal's
+    predictor file and is omitted here (real_rate/term_premium/
+    default_premium/inflation only)."""
+    facs = load_factors()
+    sent = _LOADERS[sentiment_kind]()
+    panel = facs.join(sent, how="inner").sort_index()
+    control_cols = []
+    if with_controls:
+        controls = load_goyal_controls()
+        panel = panel.join(controls, how="inner")
+        control_cols = ["real_rate", "term_premium", "default_premium", "inflation"]
+    panel["sentiment_z"] = (panel["sentiment"] - panel["sentiment"].mean()) / panel["sentiment"].std()
+    panel["mkt_rf_fwd"] = panel["Mkt-RF"].shift(-horizon)
+
+    cols = ["sentiment_z"] + control_cols
+    reg_df = panel.dropna(subset=["mkt_rf_fwd"] + cols)
+    X = sm.add_constant(reg_df[cols])
+    y = reg_df["mkt_rf_fwd"]
+    fit = sm.OLS(y, X).fit(cov_type="HAC", cov_kwds={"maxlags": 3})
+    return fit, reg_df
+
+
+def run_table13(sentiment_kind="pls", threshold="1sd", portfolio_kind="25"):
+    """Table 13 analogue: PLS-sentiment robustness check.
+    Panel A: predictive regression of next-month market excess return on
+    sentiment + macro controls (CAY omitted -- see predictive_regression
+    docstring). Panel B: conditional CAPM scaled by sentiment (identical
+    spec to Eq.9/Table 3 -- just reuses run())."""
+    print(f"\n{'='*78}\nTABLE 13 analogue  --  sentiment = {sentiment_kind.upper()}\n{'='*78}")
+    print("\n-- Panel A analogue: predictive regression (CAY control omitted -- not in Goyal's data) --")
+    fit, reg_df = predictive_regression(sentiment_kind, with_controls=True)
+    coef = fit.params["sentiment_z"]
+    tstat = fit.tvalues["sentiment_z"]
+    print(f"  beta_sentiment = {coef:.4f}   t (HAC) = {tstat:.3f}   (T = {len(reg_df)})")
+    print(fit.summary().tables[1])
+
+    print("\n-- Panel B analogue: conditional CAPM scaled by sentiment (Eq.9/Table 3 spec) --")
+    panelB = run(sentiment_kind, threshold=threshold, portfolio_kind=portfolio_kind)
+
+    return {"panelA_fit": fit, "panelB": panelB}
 
 
 if __name__ == "__main__":
