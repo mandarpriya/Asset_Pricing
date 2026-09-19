@@ -4,3 +4,8 @@
 .Ruserdata
 __pycache__/
 *.pyc
+.DS_Store
+*.save
+.Rapp.history
+02_Data_Preparation/*_cache/
+02_Data_Preparation/*_files/
