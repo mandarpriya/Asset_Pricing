@@ -6,19 +6,15 @@
 The data for ETFs is from yahoo finance and the Fama-French Factor data is obtained from the Kenneth French website https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library.html#Research, and the Q factors is obtained from https://global-q.org/factors.html. 
 
  The objective is to analyse the returns sectoral ETFs data which have exposure to US. Then followed by implementing the CAPM model with Fama-French 3, 5 factors and then as an extension using Q factors. Then the next logical step to follow is the Fama-Macbeth model, for which we use the OLS, GLS and GMM . The motivation for this has been the the book "Asset Pricing" by John Cochrane  (https://www.johnhcochrane.com/asset-pricing)
-# Extension for this  would be to include the Nasdaq listed companies based on their respective cap and sector , and for S&P 500 / DJIA /...
-
+# Extension has been complete 
 
 Programming is done on Python and code will added in coming  days. 
 
 
-I have added the PYthon file, and added the Sahnken Correction.
+I have added the Python file, and added the Shanken Correction.
 
-Finally completed the Asset_Pricing using Fama-Macbeth model and with Shanken Correction
+Next Step was adding the the various sentiments which are the consumer sentiment, PMI index, CFNAI index which are believed to capture the markets in the analysis.
 
-So i guess may be adding sentiments in the analysis for the same
-
-I have aded the sentiments in the analysis , so finally done with the CAPM model, Fama-Macbeth Model and Shanken Correction. 
 
 
 
