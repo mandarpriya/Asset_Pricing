@@ -38,11 +38,13 @@ IMPORTANT CAVEATS -- read before trusting numbers against the published tables:
   - "PMI" is the ISM Manufacturing PMI (investing.com export, Dec 1969-Aug
     2026) -- NOT one of the paper's four indices (BW, MCSI, CBCCI, AS). It's
     included only as an extra, informal robustness check the user asked for.
-  - Baker-Wurgler (BW) and Conference Board (CBCCI) indices are NOT included
-    (not sourced yet -- BW needs Wurgler's static file, CBCCI is paywalled
-    beyond a short public history).
+  - "BW" is the officially maintained Baker & Wurgler index update
+    (github.com/BWInvestorSentimentIndex), SENT_ORTH column, July 1965-Dec 2025.
+    This is the actual series the paper uses, not a substitute.
+  - "CBCCI" is Conference Board Consumer Confidence (investing.com export).
   - This is a faithful-to-the-paper *implementation*, not a byte-for-byte
-    reproduction: exact table values will differ from Doukas & Han (2021).
+    reproduction: exact table values will differ from Doukas & Han (2021),
+    since test assets are a newer vintage of Ken French's data.
 """
 import numpy as np
 import pandas as pd
@@ -91,11 +93,30 @@ def load_pmi(path=f"{DATA_DIR}/pmi_ism_raw.csv"):
     return df.rename("sentiment")
 
 
+def load_bw(path=f"{DATA_DIR}/bw_raw.csv"):
+    """Baker & Wurgler sentiment index, orthogonalized version (SENT_ORTH),
+    from the officially maintained update (github.com/BWInvestorSentimentIndex).
+    This is the exact series the paper uses -- monthly since July 1965,
+    already orthogonalized to macro variables, no interpolation needed."""
+    df = pd.read_csv(path).rename(columns={"yearmo": "ym"}).sort_values("ym").set_index("ym")
+    return df["SENT_ORTH"].dropna().rename("sentiment")
+
+
+def load_cbcci(path=f"{DATA_DIR}/cbcci_raw.csv"):
+    """Conference Board Consumer Confidence Index (investing.com export,
+    same [Date, Time, Actual, Forecast, Previous] layout as the PMI file)."""
+    df = pd.read_csv(path).sort_values("ym").set_index("ym")["cbcci"]
+    return df.rename("sentiment")
+
+
+_LOADERS = {"mcsi": load_mcsi, "pmi": load_pmi, "bw": load_bw, "cbcci": load_cbcci}
+
+
 # ------------------------------------------------------------- panel build --
 def build_panel(sentiment_kind="mcsi"):
     ports = load_portfolios()
     facs = load_factors()
-    sent = load_mcsi() if sentiment_kind == "mcsi" else load_pmi()
+    sent = _LOADERS[sentiment_kind]()
 
     panel = ports.join(facs, how="inner").join(sent, how="inner")
     panel = panel.sort_index()
@@ -112,7 +133,7 @@ def build_panel(sentiment_kind="mcsi"):
     return panel, port_cols
 
 
-# ----------------------------------------------------------- first stage ----
+# ---------------------------------------------------------- first stage ----
 def first_stage_betas(panel, port_cols, factor_cols=("s_lag", "mkt_rf", "s_mkt")):
     betas = {}
     resid = {}
