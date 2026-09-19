@@ -38,13 +38,11 @@ IMPORTANT CAVEATS -- read before trusting numbers against the published tables:
   - "PMI" is the ISM Manufacturing PMI (investing.com export, Dec 1969-Aug
     2026) -- NOT one of the paper's four indices (BW, MCSI, CBCCI, AS). It's
     included only as an extra, informal robustness check the user asked for.
-  - "BW" is the officially maintained Baker & Wurgler index update
-    (github.com/BWInvestorSentimentIndex), SENT_ORTH column, July 1965-Dec 2025.
-    This is the actual series the paper uses, not a substitute.
-  - "CBCCI" is Conference Board Consumer Confidence (investing.com export).
+  - Baker-Wurgler (BW) and Conference Board (CBCCI) indices are NOT included
+    (not sourced yet -- BW needs Wurgler's static file, CBCCI is paywalled
+    beyond a short public history).
   - This is a faithful-to-the-paper *implementation*, not a byte-for-byte
-    reproduction: exact table values will differ from Doukas & Han (2021),
-    since test assets are a newer vintage of Ken French's data.
+    reproduction: exact table values will differ from Doukas & Han (2021).
 """
 import numpy as np
 import pandas as pd
@@ -109,7 +107,17 @@ def load_cbcci(path=f"{DATA_DIR}/cbcci_raw.csv"):
     return df.rename("sentiment")
 
 
-_LOADERS = {"mcsi": load_mcsi, "pmi": load_pmi, "bw": load_bw, "cbcci": load_cbcci}
+def load_cfnai(path=f"{DATA_DIR}/cfnai_raw.csv"):
+    """Chicago Fed National Activity Index (chicagofed.org export, main
+    CFNAI series). NOT one of the paper's four indices -- a business-cycle
+    activity gauge, not an investor-sentiment survey. Included as an extra
+    robustness check the user asked for."""
+    df = pd.read_csv(path).sort_values("ym").set_index("ym")["cfnai"]
+    return df.rename("sentiment")
+
+
+_LOADERS = {"mcsi": load_mcsi, "pmi": load_pmi, "bw": load_bw,
+            "cbcci": load_cbcci, "cfnai": load_cfnai}
 
 
 # ------------------------------------------------------------- panel build --
@@ -133,7 +141,7 @@ def build_panel(sentiment_kind="mcsi"):
     return panel, port_cols
 
 
-# ---------------------------------------------------------- first stage ----
+# ----------------------------------------------------------- first stage ----
 def first_stage_betas(panel, port_cols, factor_cols=("s_lag", "mkt_rf", "s_mkt")):
     betas = {}
     resid = {}
