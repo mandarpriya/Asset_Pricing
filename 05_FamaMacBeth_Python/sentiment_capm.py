@@ -130,8 +130,25 @@ def load_cfnai(path=f"{DATA_DIR}/cfnai_raw.csv"):
     return df.rename("sentiment")
 
 
+def load_as():
+    """Augmented Sentiment (AS) index -- the paper's fourth and headline
+    index, AS_t = 0.318*BW_t + 0.443*MCI_t + 0.452*CB_t (their own PCA
+    loading on the first principal component of BW, MCSI and CBCCI).
+    Each component is standardized (z-scored) over the common overlap
+    sample before combining, since the paper's loadings apply to
+    standardized inputs. Overlap sample here is Dec 1969 - Dec 2025
+    (limited by CBCCI's start date)."""
+    bw = load_bw()
+    mcsi = load_mcsi()
+    cbcci = load_cbcci()
+    df = pd.DataFrame({"bw": bw, "mcsi": mcsi, "cbcci": cbcci}).dropna()
+    z = (df - df.mean()) / df.std()
+    as_idx = 0.318 * z["bw"] + 0.443 * z["mcsi"] + 0.452 * z["cbcci"]
+    return as_idx.rename("sentiment")
+
+
 _LOADERS = {"mcsi": load_mcsi, "pmi": load_pmi, "bw": load_bw,
-            "cbcci": load_cbcci, "cfnai": load_cfnai}
+            "cbcci": load_cbcci, "cfnai": load_cfnai, "as": load_as}
 
 
 # ------------------------------------------------------------- panel build --
