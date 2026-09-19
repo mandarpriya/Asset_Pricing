@@ -333,6 +333,50 @@ def run(sentiment_kind="mcsi", threshold="1sd", portfolio_kind="25"):
     }
 
 
+# --------------------------------------------------- scaled FF3 (Table 11) --
+def build_panel_ff3(sentiment_kind="mcsi", portfolio_kind="25"):
+    """Panel for the paper's Table 11 spec: sentiment-scaled FF3, i.e. the
+    first-stage regressors are s_{t-1}*MktRF_t, s_{t-1}*SMB_t, s_{t-1}*HML_t
+    -- NOT a plain s_{t-1} level term (unlike the base scaled-CAPM Eq.9)."""
+    panel, port_cols = build_panel(sentiment_kind, portfolio_kind)
+    panel["s_smb"] = panel["s_lag"] * panel["SMB"]
+    panel["s_hml"] = panel["s_lag"] * panel["HML"]
+    return panel, port_cols
+
+
+def run_ff3(sentiment_kind="mcsi", portfolio_kind="25"):
+    """Table 11 analogue: E_t(R_i,t+1) = rf + b^s_i,m*lam^s_m + b^s_i,smb*lam^s_smb
+    + b^s_i,hml*lam^s_hml, on the 25 Size-BM portfolios (paper tests all four
+    sentiment indices against this spec)."""
+    factor_cols = ("s_mkt", "s_smb", "s_hml")
+    panel, port_cols = build_panel_ff3(sentiment_kind, portfolio_kind)
+    beta_mat, resid_mat = first_stage_betas(panel, port_cols, factor_cols)
+    lam_df, lam_mean, se_fm, t_fm = fama_macbeth(panel, port_cols, beta_mat)
+    shanken_mult = shanken_correction(lam_mean, panel, factor_cols)
+    se_shanken = se_fm.copy()
+    se_shanken[list(factor_cols)] *= shanken_mult
+    t_shanken = lam_mean / se_shanken
+
+    avg_ret, fitted, alpha, r2, r2_adj = cross_sectional_fit(
+        panel, port_cols, beta_mat, lam_mean, factor_cols)
+    r2gls = gls_r2(panel, port_cols, avg_ret, fitted)
+
+    print(f"\n{'='*78}\nSENTIMENT-SCALED FF3 (Table 11 analogue)  --  sentiment = {sentiment_kind.upper()}"
+          f"  ({portfolio_kind}-portfolio test assets)\n{'='*78}")
+    print(f"Sample: {panel.index.min()} - {panel.index.max()}  (T = {len(panel)} months, N = {len(port_cols)} portfolios)\n")
+    tbl = pd.DataFrame({
+        "lambda": lam_mean, "t_FM": t_fm, "SE_FM": se_fm,
+        "t_Shanken": t_shanken, "SE_Shanken": se_shanken,
+    })
+    print(tbl.round(4))
+    print(f"\nR^2 (unadjusted): {r2:.4f}   R^2 (adjusted): {r2_adj:.4f}   R^2 (GLS): {r2gls:.4f}")
+
+    return {
+        "panel": panel, "port_cols": port_cols, "beta_mat": beta_mat,
+        "lambda_table": tbl, "r2": r2, "r2_adj": r2_adj, "r2_gls": r2gls,
+    }
+
+
 if __name__ == "__main__":
     import sys
     kind = sys.argv[1] if len(sys.argv) > 1 else "mcsi"
