@@ -377,6 +377,141 @@ def run_ff3(sentiment_kind="mcsi", portfolio_kind="25"):
     }
 
 
+# --------------------------------------------- anomaly portfolios (Tables 8/9) --
+# PARTIAL replication only. The paper's Table 8/9 use 8 Stambaugh, Yu & Yuan
+# (2012) anomalies: asset growth, net operating assets, net stock issues,
+# total accruals, composite equity issuance, investment-to-assets, return on
+# equity, and failure probability -- built from CRSP/Compustat via WRDS. No
+# WRDS access here, and Stambaugh's own public data page only offers the
+# composite MISP score / a 4-factor MGMT-PERF model, not per-anomaly decile
+# returns. Substituted with the 4 closest analogues publicly available from
+# Ken French's data library: net share issues (NI), investment (INV),
+# accruals (AC), and operating profitability (OP) as a stand-in for ROE --
+# NOT the paper's exact variable definitions, and only 4 of the paper's 8
+# anomalies. Long/short leg directions follow the standard convention in
+# this literature (the side theory predicts to earn the higher return is
+# "long"): low NI/INV/AC = long, high = short; for OP it's the reverse
+# (high profitability = long) since profitability is positively priced.
+
+_ANOMALY_CODES = ["NI", "INV", "AC", "OP"]
+_ANOMALY_LONG_SHORT = {
+    "NI": ("Dec1", "Dec10"), "INV": ("Dec1", "Dec10"),
+    "AC": ("Dec1", "Dec10"), "OP": ("Dec10", "Dec1"),
+}
+
+
+def load_anomaly_deciles(code):
+    path = f"{DATA_DIR}/clean_{code}_deciles.csv"
+    df = pd.read_csv(path, parse_dates=["Date"])
+    df["ym"] = df["Date"].dt.year * 100 + df["Date"].dt.month
+    df = df.drop(columns=["Date"]).set_index("ym")
+    df.columns = [f"{code}_{c}" for c in df.columns]
+    return df  # 10 columns (Dec1..Dec10), monthly returns in percent
+
+
+def load_portfolios_anomaly_pool():
+    """Pooled deciles across the 4 available anomalies (40 portfolios total
+    -- the paper pools 8 anomalies x 10 deciles = 80)."""
+    parts = [load_anomaly_deciles(c) for c in _ANOMALY_CODES]
+    df = parts[0]
+    for p in parts[1:]:
+        df = df.join(p, how="inner")
+    return df
+
+
+_PORT_LOADERS["anomaly_pool"] = load_portfolios_anomaly_pool
+
+
+def _build_single_anomaly_panel(code, sentiment_kind="as"):
+    ports = load_anomaly_deciles(code)
+    port_cols = list(ports.columns)
+    facs = load_factors()
+    sent = _LOADERS[sentiment_kind]()
+    panel = ports.join(facs, how="inner").join(sent, how="inner").sort_index()
+    panel["sentiment_z"] = (panel["sentiment"] - panel["sentiment"].mean()) / panel["sentiment"].std()
+    panel["s_lag"] = panel["sentiment_z"].shift(1)
+    panel["mkt_rf"] = panel["Mkt-RF"]
+    panel["s_mkt"] = panel["s_lag"] * panel["mkt_rf"]
+    panel = panel.dropna(subset=["s_lag", "s_mkt"])
+    for c in port_cols:
+        panel[c] = panel[c] - panel["RF"]
+    return panel, port_cols
+
+
+def table8_state_beta(sentiment_kind="as", threshold="1sd"):
+    """Table 8 Panel B analogue: state-beta regression (Tables 6/7
+    methodology) run separately on each anomaly's own 10 deciles."""
+    rows = {}
+    for code in _ANOMALY_CODES:
+        panel, port_cols = _build_single_anomaly_panel(code, sentiment_kind)
+        beta_mat, _ = first_stage_betas(panel, port_cols)
+        state_out, _ = state_beta_analysis(panel, port_cols, beta_mat, threshold)
+        b, t, r2 = state_out["state_beta_vs_avg_return"]
+        rows[code] = {"b": b, "t": t, "R2": r2}
+    return pd.DataFrame(rows).T
+
+
+def table9_long_short(sentiment_kind="as", threshold="1sd"):
+    """Table 9 analogue: returns and conditional betas of the long and
+    short legs of each anomaly, split by good/bad sentiment state."""
+    rows = []
+    for code in _ANOMALY_CODES:
+        panel, port_cols = _build_single_anomaly_panel(code, sentiment_kind)
+        long_suffix, short_suffix = _ANOMALY_LONG_SHORT[code]
+        long_col, short_col = f"{code}_{long_suffix}", f"{code}_{short_suffix}"
+
+        beta_mat, _ = first_stage_betas(panel, port_cols)
+        s = panel["sentiment_z"]
+        if threshold == "1sd":
+            good, bad = s >= 1.0, s <= -1.0
+        else:
+            good, bad = s >= 0, s < 0
+        s_good_mean = panel.loc[good, "sentiment_z"].mean()
+        s_bad_mean = panel.loc[bad, "sentiment_z"].mean()
+
+        def cond_beta(col):
+            b_m, b_sm = beta_mat.loc[col, "mkt_rf"], beta_mat.loc[col, "s_mkt"]
+            return b_m + b_sm * s_good_mean, b_m + b_sm * s_bad_mean  # (good, bad)
+
+        long_beta_good, long_beta_bad = cond_beta(long_col)
+        short_beta_good, short_beta_bad = cond_beta(short_col)
+
+        long_ret_good, long_ret_bad = panel.loc[good, long_col].mean(), panel.loc[bad, long_col].mean()
+        short_ret_good, short_ret_bad = panel.loc[good, short_col].mean(), panel.loc[bad, short_col].mean()
+        ls_ret_good = long_ret_good - short_ret_good
+        ls_ret_bad = long_ret_bad - short_ret_bad
+
+        rows.append({
+            "anomaly": code,
+            "long_ret_good": long_ret_good, "long_ret_bad": long_ret_bad,
+            "short_ret_good": short_ret_good, "short_ret_bad": short_ret_bad,
+            "long_short_good": ls_ret_good, "long_short_bad": ls_ret_bad,
+            "long_beta_good": long_beta_good, "long_beta_bad": long_beta_bad,
+            "short_beta_good": short_beta_good, "short_beta_bad": short_beta_bad,
+        })
+    return pd.DataFrame(rows).set_index("anomaly")
+
+
+def run_anomaly_tables(sentiment_kind="as", threshold="1sd"):
+    """Driver for the partial Table 8/9 replication (see module-level note
+    above on what's substituted and why)."""
+    print(f"\n{'='*78}\nANOMALY PORTFOLIOS -- PARTIAL Table 8/9 analogue  --  sentiment = {sentiment_kind.upper()}"
+          f"\n(4 of the paper's 8 anomalies: NI, INV, AC, OP-as-ROE -- see module docstring)\n{'='*78}")
+
+    print("\n-- Table 8 Panel B analogue: per-anomaly state-beta regression --")
+    t8 = table8_state_beta(sentiment_kind, threshold)
+    print(t8.round(4))
+
+    print("\n-- Table 8 Panel C analogue: pooled 40-portfolio FMB cross-section --")
+    pooled = run(sentiment_kind, threshold=threshold, portfolio_kind="anomaly_pool")
+
+    print("\n-- Table 9 analogue: long/short leg returns & conditional betas by state --")
+    t9 = table9_long_short(sentiment_kind, threshold)
+    print(t9.round(4))
+
+    return {"table8_state_beta": t8, "pooled_fmb": pooled, "table9": t9}
+
+
 if __name__ == "__main__":
     import sys
     kind = sys.argv[1] if len(sys.argv) > 1 else "mcsi"
