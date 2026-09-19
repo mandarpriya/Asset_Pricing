@@ -59,6 +59,20 @@ def load_portfolios(path=f"{DATA_DIR}/clean_25_Portfolios_5x5.csv"):
     return df  # 25 columns, monthly returns in percent
 
 
+def load_portfolios_32(path=f"{DATA_DIR}/clean_32_Portfolios_OP_INV.csv"):
+    """Ken French 32 portfolios formed on Size x Operating Profitability x
+    Investment (2x4x4), value-weighted returns. Alternative test-asset set
+    to the 25 Size-BM portfolios, for a robustness check (recovered from the
+    user's own ff32_panel.csv, long-format VW/EW returns since Jul 1963)."""
+    df = pd.read_csv(path, parse_dates=["Date"])
+    df["ym"] = df["Date"].dt.year * 100 + df["Date"].dt.month
+    df = df.drop(columns=["Date"]).set_index("ym")
+    return df  # 32 columns, monthly returns in percent
+
+
+_PORT_LOADERS = {"25": load_portfolios, "32": load_portfolios_32}
+
+
 def load_factors(path=f"{DATA_DIR}/clean_F-F_Research_Data_Factors.csv"):
     df = pd.read_csv(path, parse_dates=["Date"])
     df["ym"] = df["Date"].dt.year * 100 + df["Date"].dt.month
@@ -121,8 +135,8 @@ _LOADERS = {"mcsi": load_mcsi, "pmi": load_pmi, "bw": load_bw,
 
 
 # ------------------------------------------------------------- panel build --
-def build_panel(sentiment_kind="mcsi"):
-    ports = load_portfolios()
+def build_panel(sentiment_kind="mcsi", portfolio_kind="25"):
+    ports = _PORT_LOADERS[portfolio_kind]()
     facs = load_factors()
     sent = _LOADERS[sentiment_kind]()
 
@@ -263,8 +277,8 @@ def state_beta_analysis(panel, port_cols, beta_mat, threshold="1sd"):
 
 
 # ------------------------------------------------------------------- driver -
-def run(sentiment_kind="mcsi", threshold="1sd"):
-    panel, port_cols = build_panel(sentiment_kind)
+def run(sentiment_kind="mcsi", threshold="1sd", portfolio_kind="25"):
+    panel, port_cols = build_panel(sentiment_kind, portfolio_kind)
     beta_mat, resid_mat = first_stage_betas(panel, port_cols)
     lam_df, lam_mean, se_fm, t_fm = fama_macbeth(panel, port_cols, beta_mat)
     shanken_mult = shanken_correction(lam_mean, panel)
@@ -278,7 +292,7 @@ def run(sentiment_kind="mcsi", threshold="1sd"):
     state_out, state_table = state_beta_analysis(panel, port_cols, beta_mat, threshold)
 
     print(f"\n{'='*78}\nSENTIMENT-SCALED CAPM  --  sentiment = {sentiment_kind.upper()}"
-          f"  ({threshold} good/bad split)\n{'='*78}")
+          f"  ({threshold} good/bad split, {portfolio_kind}-portfolio test assets)\n{'='*78}")
     print(f"Sample: {panel.index.min()} - {panel.index.max()}  (T = {len(panel)} months, N = {len(port_cols)} portfolios)\n")
 
     print("-- Fama-MacBeth cross-sectional regression (Table 3 analogue) --")
@@ -305,4 +319,5 @@ def run(sentiment_kind="mcsi", threshold="1sd"):
 if __name__ == "__main__":
     import sys
     kind = sys.argv[1] if len(sys.argv) > 1 else "mcsi"
-    run(kind)
+    port_kind = sys.argv[2] if len(sys.argv) > 2 else "25"
+    run(kind, portfolio_kind=port_kind)
