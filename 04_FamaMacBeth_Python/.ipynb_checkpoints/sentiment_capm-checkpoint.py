@@ -130,39 +130,21 @@ def load_cfnai(path=f"{DATA_DIR}/cfnai_raw.csv"):
     return df.rename("sentiment")
 
 
-def load_as(verbose=True):
-    """Augmented Sentiment (AS) index -- first principal component of
-    BW, MCSI and CBCCI, computed via PCA on OUR OWN sample (NOT the
-    paper's published loadings 0.318/0.443/0.452 -- those were fit on
-    their own sample period, which differs from ours, so reusing them
-    verbatim would be wrong). Each component is standardized (z-scored)
-    over the common overlap sample, PCA is run on the resulting
-    correlation matrix (via eigen-decomposition), and the eigenvector
-    for the largest eigenvalue gives the 1st-PC loadings -- sign-
-    normalized so all three loadings come out positive, matching the
-    paper's convention that higher sentiment on any component raises AS."""
+def load_as():
+    """Augmented Sentiment (AS) index -- the paper's fourth and headline
+    index, AS_t = 0.318*BW_t + 0.443*MCI_t + 0.452*CB_t (their own PCA
+    loading on the first principal component of BW, MCSI and CBCCI).
+    Each component is standardized (z-scored) over the common overlap
+    sample before combining, since the paper's loadings apply to
+    standardized inputs. Overlap sample here is Dec 1969 - Dec 2025
+    (limited by CBCCI's start date)."""
     bw = load_bw()
     mcsi = load_mcsi()
     cbcci = load_cbcci()
     df = pd.DataFrame({"bw": bw, "mcsi": mcsi, "cbcci": cbcci}).dropna()
     z = (df - df.mean()) / df.std()
-
-    corr = z.cov().values  # z already standardized, so cov(z) == corr(raw)
-    eigvals, eigvecs = np.linalg.eigh(corr)  # ascending eigenvalue order
-    pc1 = eigvecs[:, -1]  # eigenvector for the largest eigenvalue
-    if pc1.sum() < 0:  # PCA sign is arbitrary -- flip so loadings are positive
-        pc1 = -pc1
-    loadings = pd.Series(pc1, index=["bw", "mcsi", "cbcci"])
-    explained_pct = 100 * eigvals[-1] / eigvals.sum()
-
-    if verbose:
-        print("AS index -- own-sample PCA loadings (1st PC):")
-        print(loadings.round(4))
-        print(f"Variance explained by 1st PC: {explained_pct:.1f}%")
-        print("(paper's reported loadings, for comparison: BW=0.318, MCSI=0.443, CBCCI=0.452)")
-
-    as_idx = z[["bw", "mcsi", "cbcci"]].values @ loadings.values
-    return pd.Series(as_idx, index=z.index, name="sentiment")
+    as_idx = 0.318 * z["bw"] + 0.443 * z["mcsi"] + 0.452 * z["cbcci"]
+    return as_idx.rename("sentiment")
 
 
 def load_pls(path=f"{DATA_DIR}/pls_sentiment_raw.csv"):
