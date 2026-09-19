@@ -18,6 +18,8 @@ Finally completed the Asset_Pricing using Fama-Macbeth model and with Shanken Co
 
 So i guess may be adding sentiments in the analysis for the same
 
+I have aded the sentiments in the analysis , so finally done with the CAPM model, Fama-Macbeth Model and Shanken Correction. 
+
 
 
 
