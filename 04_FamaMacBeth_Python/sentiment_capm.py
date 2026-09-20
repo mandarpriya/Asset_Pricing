@@ -69,6 +69,8 @@ reproduction: exact table values will differ from Doukas & Han (2021). On the
 25 portfolios it tracks them closely -- signs match throughout, CBCCI's lambda_m
 comes out at -0.746 against their -0.74, MCSI's intercept at 1.08 vs 1.04.
 """
+import os
+
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
@@ -1131,6 +1133,210 @@ def run_table2(date_range=None, controls="paper", add_cay=False, add_macro=False
     print(f"\n-- Panel B: with controls ({label}) --")
     print(panelB.round(4))
     return {"panelA": panelA, "panelB": panelB}
+
+
+# ------------------------------------------------- Kroencke-Thimme omnibus tests --
+OMNIBUS_DIR = "05_Omnibus"
+
+
+def _load_omnibus(omnibus_dir=OMNIBUS_DIR):
+    """Import Kroencke & Thimme's omnibus() from 05_Omnibus/.
+
+    Their code imports its six helpers (nw, hac_var, linchi2, cdfchic,
+    block_bootstrap, FMB_coefficients) as TOP-LEVEL modules, so the folder
+    has to be on sys.path -- importing the file by path alone fails."""
+    import sys
+    d = os.path.abspath(omnibus_dir)
+    if not os.path.isdir(d):
+        raise FileNotFoundError(
+            f"{d} not found. It should hold Omnibus.py plus nw.py, hac_var.py, "
+            "linchi2.py, cdfchic.py, block_bootstrap.py, FMB_coefficients.py")
+    if d not in sys.path:
+        sys.path.insert(0, d)
+    import Omnibus
+    return Omnibus
+
+
+def omnibus_tests(sentiment_kind="bw", portfolio_kind="25", date_range=COMMON_WINDOW,
+                  factor_cols=("s_lag", "mkt_rf", "s_mkt"), verbose=True):
+    """Run the scaled CAPM through Kroencke & Thimme's omnibus() toolkit.
+
+    Source: Kroencke, Tim A. & Thimme, Julian (2021), "A Skeptical Appraisal
+    of Robust Asset Pricing Tests". Their header asks that the paper be cited
+    whenever the code is used -- so cite it.
+
+    WHY THIS EXISTS. Everything else in this module reports an R^2 with no
+    standard error, and t-statistics that assume the model is CORRECTLY
+    SPECIFIED. Both assumptions are doing a lot of work:
+
+      5.14  Kan/Robotti/Shanken standard error of the sample cross-sectional
+            R^2. Without it, comparing "BW gets 0.82" against "MCSI gets
+            0.54" is comparing two point estimates with no idea whether they
+            differ. KRS (2013, JF) showed this R^2 is estimated very
+            imprecisely.
+      5.13  KRS test of H0: R^2 = 0.
+      3.07  KRS MISSPECIFICATION-ROBUST standard errors. Ordinary
+            Fama-MacBeth and Shanken SEs are only valid if the model is
+            true. Given the GLS R^2, the chi^2 rejections and the sign flip
+            in lambda_s_mkt under reweighting, that is not a safe assumption
+            here -- so these are the more honest t-statistics.
+      3.03  Shanken SEs, computed by their code. Included purely as a
+            cross-check that our panel is being handed over correctly: this
+            should reproduce run()'s own Shanken column.
+
+    NOTE on their options: omnibus() hardcodes lags=3 (matching our HAC
+    choice) and traded_f=1 internally. traded_f only selects a default null
+    value for Lambda0, and since we leave Lambda0 at its default of 0 the
+    setting never binds -- every test below is against H0: parameter = 0."""
+    Omni = _load_omnibus()
+    panel, port_cols = build_panel(sentiment_kind, portfolio_kind, date_range)
+    R = panel[port_cols].values                 # T x N excess returns
+    f = panel[list(factor_cols)].values         # T x K factors
+    T, N, K = len(panel), len(port_cols), len(factor_cols)
+
+    out = {}
+    for m in (3.03, 3.07, 5.13, 5.14):
+        try:
+            out[m] = Omni.omnibus(R, f, m)
+        except Exception as exc:                # noqa: BLE001 -- report, don't abort
+            out[m] = {"error": f"{type(exc).__name__}: {exc}"}
+
+    def _theta(a):
+        """omnibus returns the intercept as 'const' and the K factor premia as
+        'Lambda' SEPARATELY, while its SE/T vectors are length K+1 with the
+        intercept first. Stitch them back together so labels line up."""
+        return np.concatenate([np.ravel(a["const"]), np.ravel(a["Lambda"])])
+
+    if verbose:
+        print(f"\n{'='*78}\nOMNIBUS TESTS (Kroencke & Thimme)  --  sentiment = "
+              f"{sentiment_kind.upper()}  ({portfolio_kind} portfolios)\n{'='*78}")
+        print(f"Sample: {panel.index.min()} - {panel.index.max()}  "
+              f"(T = {T}, N = {N}, K = {K})\n")
+
+        a14 = out[5.14]
+        if "error" not in a14:
+            # NOTE the pairing: omnibus reports R2 (no intercept) and R2i (WITH
+            # intercept). Method 5.14's formula uses R2i, and R2i is what matches
+            # run()'s own r2 -- so the SE belongs to R2i, not to R2.
+            r2i = float(np.ravel(a14["R2i"])[0])
+            sev = float(np.ravel(a14["SE"])[0])
+            lo, hi = r2i - 1.96 * sev, r2i + 1.96 * sev
+            print("-- Cross-sectional R^2 with a STANDARD ERROR (KRS, method 5.14) --")
+            print(f"   R^2 (with intercept) = {r2i:.4f}   SE = {sev:.4f}")
+            print(f"   95% CI = [{lo:.4f}, {min(hi, 1.0):.4f}]"
+                  f"{'  (upper bound truncated at 1)' if hi > 1 else ''}")
+            print(f"   for reference: R^2 without intercept = "
+                  f"{float(np.ravel(a14['R2'])[0]):.4f}, "
+                  f"GLS R^2 = {float(np.ravel(a14['R2i_gls'])[0]):.4f}")
+            print("   The interval is the point. Comparing bare R^2 across models"
+                  " says little\n   when each one carries an interval this wide.\n")
+
+        if "error" in out[5.13]:
+            print(f"-- H0: R^2 = 0 (method 5.13): unavailable -- {out[5.13]['error']}")
+            print("   (their own header flags known numerical issues in some"
+                  " methods; 5.14 above\n   still gives the SE, which is the"
+                  " part that matters here.)\n")
+
+        names = ["const"] + list(factor_cols)
+        for m, lbl in ((3.03, "Shanken SEs, THEIR implementation (cross-check)"),
+                       (3.07, "KRS misspecification-ROBUST SEs")):
+            a = out[m]
+            if "error" in a:
+                print(f"-- method {m}: {a['error']}\n")
+                continue
+            th, se_, tt = _theta(a), np.ravel(a["SE"]), np.ravel(a["T"])
+            print(f"-- {lbl} (method {m}) --")
+            for i, nm in enumerate(names):
+                print(f"   {nm:8s} est={th[i]: .4f}  SE={se_[i]:.4f}  t={tt[i]: .3f}")
+            print()
+
+        print("-- Reading the two SE columns together --")
+        print("   3.03 assumes the model is CORRECTLY specified; 3.07 does not.")
+        print("   Given the GLS R^2, the chi2 rejections and the sign flip in")
+        print("   lambda_s_mkt under reweighting, 3.07 is the more defensible one.")
+        print("   NOTE: their 3.03 applies the Shanken multiplier to the INTERCEPT")
+        print("   as well, which run() deliberately does not -- so the constant's")
+        print("   t differs between the two by construction. The factor lambdas and")
+        print("   both R^2 measures match run() exactly.\n")
+
+    return {"panel": panel, "port_cols": port_cols, "results": out}
+
+
+def intercept_restriction(kinds=("bw", "mcsi", "cbcci", "pmi", "cfnai"),
+                          portfolio_kind="25", date_range=COMMON_WINDOW,
+                          factor_cols=("s_lag", "mkt_rf", "s_mkt"), verbose=True):
+    """Test the model's OWN zero-intercept restriction, index by index.
+
+    THE POINT. The left-hand side here is an EXCESS return, so a true factor
+    model says
+
+        E[R^e_i] = beta_i' lambda        -- with NO free constant
+
+    An asset with zero betas must earn zero excess return; that is what
+    "excess" means, and it is one of the model's testable predictions rather
+    than a technicality. Estimating with a free intercept relaxes that test.
+
+    The counter-argument is real: Black's (1972) zero-beta CAPM says that
+    without riskless borrowing the zero-beta rate differs from the T-bill
+    rate, which makes a free intercept correct rather than a fudge. And under
+    misspecification, forcing lambda_0 = 0 pushes all the level error onto the
+    factor lambdas. Which is why most papers -- Doukas & Han included --
+    report the with-intercept version. This function reports BOTH so the gap
+    is visible instead of buried in a convention.
+
+    HOW TO READ IT. A large, significant constant means the intercept is
+    absorbing the LEVEL of average excess returns, leaving the factors to
+    explain only the spread around it. When that is happening, dropping the
+    intercept does not weaken the model slightly -- it collapses it.
+
+    On the 25 portfolios over COMMON_WINDOW, four of five indices carry
+    constants of 0.99-1.36 (t between 2.2 and 4.8) and fall to R^2 of -31 to
+    -59 once the intercept goes. BW is the exception: constant 0.086 (t=0.28),
+    and it still posts R^2 = 0.59 unrestricted, because its factors were
+    already pricing the level and not just the dispersion.
+
+    This pattern is in the PAPER's own Table 3 too -- their constants are
+    1.54 (CAPM), 1.71 (FF3), 1.04 (MSCI), 1.68 (CBCCI), 1.24 (AS), all
+    strongly significant, against BW at 0.33 with a Shanken t of 0.72, the
+    only insignificant one in the table. They do not draw attention to it."""
+    Omni = _load_omnibus()
+    rows = []
+    for k in kinds:
+        panel, port_cols = build_panel(k, portfolio_kind, date_range)
+        R = panel[port_cols].values
+        f = panel[list(factor_cols)].values
+        a = Omni.omnibus(R, f, 3.03)
+
+        # recompute the constant and its t the same way run() does, inline --
+        # calling run() here would print a full report per index. NOTE we use
+        # OUR convention, where the Shanken multiplier is applied to the factor
+        # lambdas but NOT to the intercept; omnibus applies it to the intercept
+        # too, so its t(const) is smaller. See omnibus_tests().
+        beta_mat, _ = first_stage_betas(panel, port_cols, factor_cols)
+        _, lam_mean, se_fm, _ = fama_macbeth(panel, port_cols, beta_mat)
+        rows.append({
+            "sentiment": k.upper(),
+            "const": lam_mean["const"],
+            "t_const": lam_mean["const"] / se_fm["const"],
+            "R2_with_int": float(np.ravel(a["R2i"])[0]),
+            "R2_no_int": float(np.ravel(a["R2"])[0]),
+            "GLS_with_int": float(np.ravel(a["R2i_gls"])[0]),
+            "GLS_no_int": float(np.ravel(a["R2_gls"])[0]),
+            "T": len(panel),
+        })
+    tbl = pd.DataFrame(rows).set_index("sentiment")
+
+    if verbose:
+        print(f"\n{'='*84}\nZERO-INTERCEPT RESTRICTION  --  {portfolio_kind} portfolios"
+              f"\n{'='*84}")
+        print("With excess returns on the LHS the model predicts const = 0.")
+        print("A big significant const means the intercept, not the factors,"
+              " is pricing the level.\n")
+        print(tbl.round(4).to_string())
+        ok = tbl[tbl["t_const"].abs() < 1.96]
+        print(f"\nSatisfies the restriction (|t(const)| < 1.96): "
+              f"{', '.join(ok.index) if len(ok) else 'NONE'}")
+    return tbl
 
 
 # --------------------------------------------- 5 individual sentiment-scaled CAPMs --

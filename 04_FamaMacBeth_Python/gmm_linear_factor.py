@@ -186,11 +186,20 @@ if __name__ == "__main__":
     import sys
     kind = sys.argv[1] if len(sys.argv) > 1 else "bw"
     port_kind = sys.argv[2] if len(sys.argv) > 2 else "25"
-    panel, port_cols = sc.build_panel(kind, port_kind)
+    # Sample window: default to sc.COMMON_WINDOW so these GMM estimates sit on
+    # exactly the same months as run() / run_all_sentiments(). NOTE this must be
+    # passed to BOTH build_panel() below AND sc.run() in the validation block at
+    # the bottom -- if only one of them gets it, that validation quietly compares
+    # two different samples and the "should match closely" check becomes
+    # meaningless. Pass "full" as a third argument to use the maximal window.
+    date_range = None if (len(sys.argv) > 3 and sys.argv[3] == "full") else sc.COMMON_WINDOW
+    panel, port_cols = sc.build_panel(kind, port_kind, date_range)
     out = gmm_linear_factor(panel, port_cols)
 
     factor_cols = out["factor_cols"]
     print(f"\n{'='*78}\nGMM LINEAR FACTOR MODEL  --  sentiment = {kind.upper()}  ({port_kind}-portfolio test assets)\n{'='*78}")
+    print(f"Sample: {panel.index.min()} - {panel.index.max()} "
+          f"(window = {'COMMON_WINDOW' if date_range else 'full'})")
     print(f"T = {len(panel)} months, N = {len(port_cols)} portfolios, K = {len(factor_cols)} factors\n")
 
     print("-- Step 1 GMM (identity-weighted): point estimates + sandwich SE --")
@@ -210,7 +219,10 @@ if __name__ == "__main__":
     print(f"\nHansen's J-test (overidentification): J = {out['J_stat']:.2f}  df = {out['J_df']}  p = {out['J_pval']:.4f}")
 
     # ---- validation: does GMM's step-1 lambda match the paper's Fama-MacBeth? ----
-    fm = sc.run(kind, portfolio_kind=port_kind)
+    fm = sc.run(kind, portfolio_kind=port_kind, date_range=date_range)
+    assert len(fm["panel"]) == len(panel), (
+        f"sample mismatch: GMM T={len(panel)} vs FM T={len(fm['panel'])} -- the "
+        "comparison below is only meaningful on identical months")
     print("\n-- Validation: GMM step-1 lambda vs. Fama-MacBeth (should match closely) --")
     fm_lam = fm["lambda_table"]["lambda"]
     compare = pd.DataFrame({

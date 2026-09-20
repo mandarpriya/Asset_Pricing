@@ -223,10 +223,19 @@ if __name__ == "__main__":
     import sys
     kind = sys.argv[1] if len(sys.argv) > 1 else "bw"
     port_kind = sys.argv[2] if len(sys.argv) > 2 else "25"
+    # Sample window: default to sc.COMMON_WINDOW so these GMM estimates sit on
+    # exactly the same months as run() / run_all_sentiments(). Without it each
+    # sentiment index silently uses its own maximal overlap, and the GMM
+    # numbers are then not comparable with the Fama-MacBeth ones -- differences
+    # between the two methods get confounded with differences in sample.
+    # Pass "full" as a third argument to use the maximal window instead.
+    date_range = None if (len(sys.argv) > 3 and sys.argv[3] == "full") else sc.COMMON_WINDOW
     factor_cols = ("s_lag", "mkt_rf", "s_mkt")
-    panel, port_cols = sc.build_panel(kind, port_kind)
+    panel, port_cols = sc.build_panel(kind, port_kind, date_range)
 
-    print(f"=== SDF-GMM  kind={kind}  ports={port_kind}  N={len(port_cols)} ===\n")
+    print(f"=== SDF-GMM  kind={kind}  ports={port_kind}  N={len(port_cols)} ===")
+    print(f"    sample: {panel.index.min()} - {panel.index.max()}  (T = {len(panel)}"
+          f", window = {'COMMON_WINDOW' if date_range else 'full'})\n")
 
     r1 = sdf_gmm_cochrane(panel, port_cols, factor_cols)
     print("6.01-equiv (Cochrane, W=I, no common pricing error)")
