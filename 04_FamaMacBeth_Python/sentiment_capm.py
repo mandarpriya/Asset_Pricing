@@ -1262,6 +1262,73 @@ def omnibus_tests(sentiment_kind="bw", portfolio_kind="25", date_range=COMMON_WI
     return {"panel": panel, "port_cols": port_cols, "results": out}
 
 
+_OMNIBUS_BASE_KEYS = {"beta", "alpha", "Lambda", "Lambda_gls", "const", "const_gls",
+                      "PE", "PEi", "PE_gls", "PEi_gls", "R2", "R2i", "R2_gls",
+                      "R2i_gls", "AV"}
+
+
+def omnibus_method(method, sentiment_kind="bw", portfolio_kind="25",
+                   date_range=COMMON_WINDOW, factor_cols=("s_lag", "mkt_rf", "s_mkt"),
+                   verbose=True):
+    """Run ONE omnibus() method on this project's panel, by number.
+
+        omnibus_method(1.01)      # betas all zero? (iid residuals)
+        omnibus_method(3.07)      # KRS misspecification-robust SEs
+        omnibus_method(5.14)      # standard error of the cross-sectional R^2
+
+    THE TRAP THIS GUARDS AGAINST. omnibus() dispatches on an exact FLOAT
+    comparison (`if method == 1.01:`). So 1.1 is NOT 1.01, and 1.2 is NOT
+    1.02 -- and when nothing matches, their code does not raise. It simply
+    returns the base result dict with none of the method-specific keys, so a
+    typo looks like a successful run that inexplicably has no test statistic.
+    This wrapper raises instead.
+
+    Method numbers, from Omnibus.py's own header:
+      1.01-1.06  preliminary: are the betas all zero / all equal?
+      2.01-2.10  cross-sectional regression WITHOUT intercept
+      3.01-3.10  cross-sectional regression WITH intercept
+                 (3.06 Giglio/Xiu three-pass, 3.07 Kan/Robotti/Shanken robust)
+      4.01-4.21  pricing-error tests without intercept (GRS, chi2, FAR, ...)
+      5.05-5.18  pricing-error tests with intercept
+                 (5.11-5.14 the KRS R^2 tests, 5.14 its standard error)
+      6.01-6.04  SDF loadings (what sdf_gmm.py reimplements)
+
+    Known to fail inside their code on this data: 5.13. Their header also
+    flags 2.09/3.09 and 6.03/6.04."""
+    Omni = _load_omnibus()
+    panel, port_cols = build_panel(sentiment_kind, portfolio_kind, date_range)
+    R = panel[port_cols].values
+    f = panel[list(factor_cols)].values
+
+    ans = Omni.omnibus(R, f, float(method))
+    extra = [k for k in ans.keys() if k not in _OMNIBUS_BASE_KEYS]
+    if not extra:
+        raise ValueError(
+            f"omnibus() returned no results for method={method!r}. Their dispatch "
+            f"is an exact float match, so the number must be written with TWO "
+            f"decimals -- 1.01 not 1.1, 3.07 not 3.7. Nothing matched {float(method)}.")
+
+    if verbose:
+        print(f"\n{'='*72}\nomnibus method {method}  --  {sentiment_kind.upper()}, "
+              f"{portfolio_kind} portfolios\n{'='*72}")
+        print(f"T = {len(panel)}, N = {len(port_cols)}, K = {len(factor_cols)}")
+        print(f"method-specific keys: {extra}\n")
+        names = ["const"] + list(factor_cols)
+        for k in extra:
+            v = np.ravel(ans[k])
+            if v.size == len(names):          # one value per coefficient
+                for nm, x in zip(names, v):
+                    print(f"   {k:6s} {nm:8s} {x: .4f}")
+            elif v.size == len(factor_cols):  # factors only, no intercept
+                for nm, x in zip(factor_cols, v):
+                    print(f"   {k:6s} {nm:8s} {x: .4f}")
+            elif v.size == 1:
+                print(f"   {k:6s} {float(v[0]): .4f}")
+            else:
+                print(f"   {k:6s} (len {v.size}) {np.round(v, 4)}")
+    return ans
+
+
 def intercept_restriction(kinds=("bw", "mcsi", "cbcci", "pmi", "cfnai"),
                           portfolio_kind="25", date_range=COMMON_WINDOW,
                           factor_cols=("s_lag", "mkt_rf", "s_mkt"), verbose=True):
