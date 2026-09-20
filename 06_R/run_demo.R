@@ -1,6 +1,6 @@
 # Runs the R implementation on both panels and checks it against the Python
 # omnibus() output. Run from 06_R/:   Rscript run_demo.R
-source("omnibus_sections_1_3.R")
+source(file = "Documents/GitHub/Asset_Pricing/06_R/omnibus_sections_1_3.R")
 
 ## ---- panel 1: FF3 / 25 size-BM (the authors' own test assets) -------------
 d  <- as.matrix(read.csv("ff3_25_monthly.csv", header = FALSE))
