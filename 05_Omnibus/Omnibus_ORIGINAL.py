@@ -762,8 +762,7 @@ def omnibus(R, f, method, Lambda0 = 0, level = 0.05):
             what = gtbar - etahat @ vhat
             alphahat[:, phat] =  R_bar - np.append(np.ones((N,1)), betahat, axis = 1) @ np.squeeze(Gammatilde) # pricing errors
             gthat[:,:, phat] = etahat @ vhat # cleaned factor proxies
-            Gammahat[0, phat] = Gammatilde[0, 0]   # BUGFIX: Gammatilde[0] is shape (1,);
-                                                  # NumPy >= 2.3 refuses to put it in a scalar slot.
+            Gammahat[0, phat] = Gammatilde[0] 
             Gammahat[1:, phat] = np.squeeze(etahat @ Gammatilde[1:]) # combine CS and TS estimates
             Miota = np.eye(N) - np.ones((N,1)) @ np.ones((1,N)) / N # goodnes of Fit
             R2F[0, phat] = R_bar.T @ Miota @ np.linalg.solve((betahat.T @ Miota @ betahat).T, betahat.T).T @ betahat.T @ Miota @ R_bar/(R_bar.T @ Miota @ R_bar) 
@@ -1722,9 +1721,7 @@ def omnibus(R, f, method, Lambda0 = 0, level = 0.05):
         if f.shape[1] == 1:
             Sf = np.expand_dims(np.cov(f.T, ddof=0), axis=(0,1))
         else:
-            Sf = np.cov(f.T, ddof=0)   # BUGFIX: "Sf =" was missing in the original,
-                                       # so 6.01/6.02 raised UnboundLocalError for K>1.
-                                       # Matches the authors' own pattern in 3.02/3.04.
+            np.cov(f.T, ddof=0)
         k = int(K*(K+1) / 2)
         a = 0
         u3 = np.zeros((T,k))
@@ -1773,9 +1770,7 @@ def omnibus(R, f, method, Lambda0 = 0, level = 0.05):
         if f.shape[1] == 1:
             Sf = np.expand_dims(np.cov(f.T, ddof=0), axis=(0,1))
         else:
-            Sf = np.cov(f.T, ddof=0)   # BUGFIX: "Sf =" was missing in the original,
-                                       # so 6.01/6.02 raised UnboundLocalError for K>1.
-                                       # Matches the authors' own pattern in 3.02/3.04.
+            np.cov(f.T, ddof=0)
         k = int(K*(K+1) / 2)
         a = 0
         u3 = np.zeros((T,k))

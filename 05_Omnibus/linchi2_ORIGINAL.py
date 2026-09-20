@@ -10,15 +10,7 @@ import scipy.stats as sps
 import scipy.optimize as spo
 
 def linchi2_func(c, d0, e = 10 ** (-6)):
-
-    # BUGFIX: callers pass c as a size-1 array (it comes out of a quadratic
-    # form) and d0 as a column. Older SciPy silently coerced these; SciPy/NumPy
-    # from 2024 onward raise "RuntimeError: Unable to parse arguments" once the
-    # array reaches spo.brentq / spo.fsolve, which need scalar bounds.
-    # Squeezing to a true scalar / 1-D here changes no arithmetic.
-    c = float(np.squeeze(np.asarray(c)))
-    d0 = np.asarray(d0).ravel()
-
+    
     if all(d0 >= 0) and (c <= 0):
         return 0
     
@@ -88,12 +80,7 @@ def linchi2_func(c, d0, e = 10 ** (-6)):
             #Choosing delta and K for integration
             psi1 = 0
             psi2 = 0
-            # BUGFIX: was np.array(10**(-9), ndmin=2), a (1,1) array (MATLAB
-            # translation artifact). It becomes the bound passed to spo.brentq
-            # below, and current SciPy rejects a non-scalar bound with
-            # "RuntimeError: Unable to parse arguments". A plain float is the
-            # same number and keeps the bounds scalar.
-            mar = 1e-9
+            mar = np.array(10 ** (-9), ndmin=2)
             eps = np.finfo(np.float64).eps
             
             if d[0] < 0:

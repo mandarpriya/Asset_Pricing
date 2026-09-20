@@ -83,10 +83,7 @@ def hac_var_func(e, K1, K2):
                             else:
                                 vv = y - x * b
                                 
-                            # NumPy >= 2.3: float() on an ndim>0 array is a TypeError
-                            # (deprecated in 1.25). vv is (T,1) so vv.T @ vv is (1,1).
-                            # np.squeeze makes it 0-d. Only change vs the authors' file.
-                            bic = float(np.squeeze(np.log(vv.T @ vv) + (k+m * (n-1)) * np.log(T-K) / (T-K)))
+                            bic = float(np.log(vv.T @ vv) + (k+m * (n-1)) * np.log(T-K) / (T-K))
                             
                             if bic < BIC:
                                 BIC = bic

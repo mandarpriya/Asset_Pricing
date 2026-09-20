@@ -1,8 +1,15 @@
 # 05_Omnibus — third-party code (not written by this project)
 
-The Python modules in this folder are **not mine**. They are redistributed here,
-unmodified, so that the replication in `04_FamaMacBeth_Python/` is reproducible
-without a separate download.
+The Python modules in this folder are **not mine**. They are redistributed here
+so that the replication in `04_FamaMacBeth_Python/` is reproducible without a
+separate download.
+
+They are redistributed **with four small fixes**, each recorded in
+[Local fixes](#local-fixes) below and marked `# BUGFIX:` in the source. The
+unmodified originals sit beside them as `*_ORIGINAL.py`. Every fix is a type or
+shape correction required by current NumPy/SciPy, or a plainly dropped
+assignment; none changes any formula, and each was verified to leave the
+numerical output bit-identical where the original still ran.
 
 ## Source and citation
 
@@ -83,13 +90,56 @@ is an easy and silent mistake.
 
 ## Known issues
 
-Method 5.13 (test of H₀: R² = 0) raises `RuntimeError: Unable to parse
-arguments` on this data. This is inside the authors' own code, not a problem
-with how it is called here — their file header flags known numerical issues in
-several methods (2.09/3.09 and 6.03/6.04 are noted explicitly). Method 5.14
-still returns the standard error, which is the part this project relies on.
-
-`omnibus()` also hardcodes its options internally: `lags = 3`, `excess_ret = 0`,
+`omnibus()` hardcodes its options internally: `lags = 3`, `excess_ret = 0`,
 `traded_f = 1`. The `traded_f` setting only selects a default null value for
 `Lambda0`, and since this project leaves `Lambda0` at its default of `0`, the
 setting never binds — every test run here is against H₀: parameter = 0.
+
+`Section 0` is **not** the same for every method. Line 172 branches on the
+integer part of the method number: `floor(method)` in `[1,2,4]` runs the
+second-pass cross-sectional regression **without** an intercept, `[3,5]` **with**
+one. So `const`, `R2i` and `R2i_gls` come back `NaN` from a 1.xx/2.xx/4.xx call,
+and `R2` from a 2.xx call is not comparable with `R2` from a 3.xx call. On the
+FF3 / 25 size-BM panel, 1964:01–2026:07:
+
+| method | `const` | `R2` | `R2i` |
+|---|---|---|---|
+| 2.01 (no intercept) | `NaN` | **0.4812** | `NaN` |
+| 3.03 (with intercept) | 0.0116 | **−42.6979** | **0.6631** |
+
+Same data, same betas — only the second pass differs. The −42.70 is not a bug:
+in the 3.xx branch `R2` is built from *with-intercept* lambdas but then drops the
+constant from the pricing errors, so it measures a model nothing constrained it
+to fit. `R2i` (0.6631) is the meaningful figure there, and `R2` (0.4812) is the
+meaningful one in the 2.xx branch. Quoting the wrong one of the four is the
+easiest silent mistake to make with this code.
+
+## Local fixes
+
+All four are in the authors' code, not in how this project calls it. They are
+latent in the published version and surface only on a current Python stack, or
+with more than one factor. Kroencke and Thimme's own paper runs `K = 1` (a
+tangency portfolio) on 2019 data with 2022-era libraries, which is very likely
+why none of them was ever hit.
+
+| file | what was wrong | fix |
+|---|---|---|
+| `hac_var.py` (~l.86) | `bic = float(np.log(vv.T @ vv) + ...)`. `vv` is `(T,1)`, so the argument is a `(1,1)` array. Converting an `ndim > 0` array to a Python scalar was deprecated in NumPy 1.25 and is a `TypeError` from NumPy 2.3. Breaks methods **1.03** and **1.06** (the VARHAC ones). | wrap in `np.squeeze` |
+| `Omnibus.py` (6.01, 6.02) | `if f.shape[1] == 1: Sf = ... else: np.cov(f.T, ddof=0)` — the `Sf =` is missing from the `else`, so the value is computed and discarded and the next line raises `UnboundLocalError`. Breaks **6.01** and **6.02** for any `K > 1`. The authors' own 3.02/3.04 have the same if/else *with* the assignment. | `Sf = np.cov(f.T, ddof = 0)` |
+| `Omnibus.py` (3.06) | `Gammahat[0, phat] = Gammatilde[0]`. `Gammatilde` is `(K+1,1)`, so `Gammatilde[0]` has shape `(1,)`; NumPy ≥ 2.3 refuses to assign it into a scalar slot. Breaks **3.06** (Giglio/Xiu). | `Gammatilde[0, 0]` |
+| `linchi2.py` (~l.91) | `mar = np.array(10 ** (-9), ndmin=2)` — a `(1,1)` array, a MATLAB-translation artifact. It is used four lines later as a bound for `spo.brentq`, which requires scalar bounds; current SciPy reports this as `RuntimeError: Unable to parse arguments`. `d0` arriving as a column causes the same problem via `d[0]`. Breaks **5.11**, **5.12**, **5.13**. | `mar = 1e-9`, plus coercing `c` to a float and `d0` to 1-D at the top of `linchi2_func` |
+
+After these, **all 57 methods in sections 2–6 run**, plus 1.01–1.06.
+
+### Library compatibility
+
+`legacy_compat.py` (mine, not the authors') restores names that NumPy 2.0 and
+pandas 2.0 removed rather than deprecated: `np.NAN`, `np.NaN`, `np.float`,
+`np.int`, `np.alltrue`, and `DataFrame.set_axis(..., inplace=True)`. It patches
+at runtime and is a no-op on older versions, so the authors' files stay as they
+are on disk. Import it before calling anything here.
+
+### Line endings
+
+The authors' files use CRLF. The patched files keep CRLF, so
+`diff *_ORIGINAL.py *.py` shows only the real changes.
