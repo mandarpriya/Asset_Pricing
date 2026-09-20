@@ -47,6 +47,7 @@ IMPORTANT CAVEATS -- read before trusting numbers against the published tables:
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
+from sklearn.decomposition import PCA
 
 DATA_DIR = "00_Data"
 
@@ -70,7 +71,21 @@ def load_portfolios_32(path=f"{DATA_DIR}/clean_32_Portfolios_OP_INV.csv"):
     return df  # 32 columns, monthly returns in percent
 
 
-_PORT_LOADERS = {"25": load_portfolios, "32": load_portfolios_32}
+def load_portfolios_industry48(path=f"{DATA_DIR}/clean_48_Industry_Portfolios.csv"):
+    """Ken French 48 Industry Portfolios, value-weighted monthly returns
+    (percent), Jul 1926 - present. Missing-data codes (-99.99/-999) are
+    already converted to NaN in the cleaned file (some industries, e.g.
+    semiconductors, didn't exist yet in the early decades -- all 48 are
+    fully populated from Jul 1969 onward). Alternative test-asset set to
+    the 25 Size-BM / 32 Size-OP-INV portfolios."""
+    df = pd.read_csv(path, parse_dates=["Date"])
+    df["ym"] = df["Date"].dt.year * 100 + df["Date"].dt.month
+    df = df.drop(columns=["Date"]).set_index("ym")
+    return df  # 48 columns, monthly returns in percent (NaN where no firms)
+
+
+_PORT_LOADERS = {"25": load_portfolios, "32": load_portfolios_32,
+                  "industry48": load_portfolios_industry48}
 
 
 def load_factors(path=f"{DATA_DIR}/clean_F-F_Research_Data_Factors.csv"):
@@ -132,37 +147,37 @@ def load_cfnai(path=f"{DATA_DIR}/cfnai_raw.csv"):
 
 def load_as(verbose=True):
     """Augmented Sentiment (AS) index -- first principal component of
-    BW, MCSI and CBCCI, computed via PCA on OUR OWN sample (NOT the
-    paper's published loadings 0.318/0.443/0.452 -- those were fit on
-    their own sample period, which differs from ours, so reusing them
-    verbatim would be wrong). Each component is standardized (z-scored)
-    over the common overlap sample, PCA is run on the resulting
-    correlation matrix (via eigen-decomposition), and the eigenvector
-    for the largest eigenvalue gives the 1st-PC loadings -- sign-
-    normalized so all three loadings come out positive, matching the
-    paper's convention that higher sentiment on any component raises AS."""
+    BW, MCSI and CBCCI, via sklearn's PCA on OUR OWN standardized sample
+    (NOT the paper's fixed 0.318/0.443/0.452 weights, which were fit on
+    their own different sample period, so reusing them verbatim would
+    be wrong)."""
     bw = load_bw()
     mcsi = load_mcsi()
     cbcci = load_cbcci()
     df = pd.DataFrame({"bw": bw, "mcsi": mcsi, "cbcci": cbcci}).dropna()
     z = (df - df.mean()) / df.std()
 
-    corr = z.cov().values  # z already standardized, so cov(z) == corr(raw)
-    eigvals, eigvecs = np.linalg.eigh(corr)  # ascending eigenvalue order
-    pc1 = eigvecs[:, -1]  # eigenvector for the largest eigenvalue
-    if pc1.sum() < 0:  # PCA sign is arbitrary -- flip so loadings are positive
-        pc1 = -pc1
-    loadings = pd.Series(pc1, index=["bw", "mcsi", "cbcci"])
-    explained_pct = 100 * eigvals[-1] / eigvals.sum()
+    pca = PCA(n_components=3)
+    scores = pca.fit_transform(z.values)  # T x 3, uncorrelated components
+    loadings_all = pd.DataFrame(
+        pca.components_.T, index=["bw", "mcsi", "cbcci"],
+        columns=["PC1", "PC2", "PC3"]
+    )
+
+    pc1_loadings = loadings_all["PC1"].copy()
+    if pc1_loadings.sum() < 0:  # PCA sign is arbitrary -- flip so loadings are positive
+        pc1_loadings *= -1
+        scores[:, 0] *= -1
 
     if verbose:
-        print("AS index -- own-sample PCA loadings (1st PC):")
-        print(loadings.round(4))
-        print(f"Variance explained by 1st PC: {explained_pct:.1f}%")
+        print("AS index -- PCA loadings (all 3 components):")
+        print(loadings_all.round(4))
+        print("Explained variance ratio:", pca.explained_variance_ratio_.round(4))
+        print(f"PC1 loadings used for AS:\n{pc1_loadings.round(4)}")
         print("(paper's reported loadings, for comparison: BW=0.318, MCSI=0.443, CBCCI=0.452)")
 
-    as_idx = z[["bw", "mcsi", "cbcci"]].values @ loadings.values
-    return pd.Series(as_idx, index=z.index, name="sentiment")
+    as_idx = pd.Series(scores[:, 0], index=z.index, name="sentiment")
+    return as_idx
 
 
 def load_pls(path=f"{DATA_DIR}/pls_sentiment_raw.csv"):
@@ -204,22 +219,55 @@ _LOADERS = {"mcsi": load_mcsi, "pmi": load_pmi, "bw": load_bw,
             "cbcci": load_cbcci, "cfnai": load_cfnai, "as": load_as, "pls": load_pls}
 
 
+# Common sample window across all 5 individual sentiment indices (BW, MCSI,
+# CBCCI, PMI, CFNAI), the Goyal macro controls, and the 48-industry test
+# assets -- determined by checking each series' actual coverage: CBCCI/PMI
+# start Dec 1969 (binding on the start side), BW's officially maintained
+# update ends Dec 2025 (binding on the end side). Pass this to any function
+# below via date_range=COMMON_WINDOW to force every run onto the identical
+# window, so results across indices/models are directly comparable rather
+# than each one silently using its own maximal-available sample.
+COMMON_WINDOW = (196912, 202512)
+
+
+def _apply_date_range(panel, date_range):
+    if date_range is None:
+        return panel
+    start_ym, end_ym = date_range
+    return panel.loc[(panel.index >= start_ym) & (panel.index <= end_ym)]
+
+
 # ------------------------------------------------------------- panel build --
-def build_panel(sentiment_kind="mcsi", portfolio_kind="25"):
+def build_panel(sentiment_kind="mcsi", portfolio_kind="25", date_range=None):
     ports = _PORT_LOADERS[portfolio_kind]()
     facs = load_factors()
     sent = _LOADERS[sentiment_kind]()
 
     panel = ports.join(facs, how="inner").join(sent, how="inner")
     panel = panel.sort_index()
+    panel = _apply_date_range(panel, date_range)
+    port_cols = list(ports.columns)
+    # drop any month with a missing test-asset return (e.g. an industry
+    # portfolio with no firms yet in the early decades) BEFORE standardizing
+    # sentiment, so the z-score isn't computed over a period we'll drop anyway
+    panel = panel.dropna(subset=port_cols)
     # standardize sentiment over the estimation sample (mean 0, sd 1), as in the paper
+    # -- when date_range is set, this mean/std is computed WITHIN the common
+    # window, so different indices' z-scores are standardized over the same
+    # period rather than each index's own idiosyncratic full history
     panel["sentiment_z"] = (panel["sentiment"] - panel["sentiment"].mean()) / panel["sentiment"].std()
     panel["s_lag"] = panel["sentiment_z"].shift(1)
+    # Doukas & Han's Eq.9 timing (confirmed against the paper): the
+    # regressors are LAGGED sentiment (s_lag), the CONTEMPORANEOUS market
+    # return (mkt_rf, same period t as the portfolio return), and their
+    # product (lagged sentiment x contemporaneous market return). Only
+    # sentiment is lagged -- Mkt-RF/SMB/HML are not. This is what makes it
+    # a genuine conditional CAPM: the asset's exposure to THIS period's
+    # market move, scaled by sentiment known BEFORE the period started.
     panel["mkt_rf"] = panel["Mkt-RF"]
     panel["s_mkt"] = panel["s_lag"] * panel["mkt_rf"]
     panel = panel.dropna(subset=["s_lag", "s_mkt"])
 
-    port_cols = list(ports.columns)
     for c in port_cols:
         panel[c] = panel[c] - panel["RF"]  # excess returns
     return panel, port_cols
@@ -277,16 +325,39 @@ def cross_sectional_fit(panel, port_cols, beta_mat, lam_mean, factor_cols=("s_la
     return avg_ret, fitted, alpha, r2, r2_adj
 
 
-def gls_r2(panel, port_cols, avg_ret, fitted):
+def gls_r2(panel, port_cols, beta_mat, factor_cols=("s_lag", "mkt_rf", "s_mkt")):
+    """Lewellen, Nagel & Shanken (2010) GLS cross-sectional R^2:
+
+        1 - (a' Sigma^-1 a) / ((Rbar - Rbar_gls*iota)' Sigma^-1 (Rbar - Rbar_gls*iota))
+
+    CRITICAL: the lambdas used to form the pricing errors 'a' are re-estimated
+    here by GLS cross-sectional regression -- they are NOT the OLS/Fama-MacBeth
+    lambdas reported in the lambda table. This matters because the GLS estimator
+    is by construction the one that MINIMISES a'Sigma^-1 a. Feeding this formula
+    alphas built from OLS lambdas leaves the numerator un-minimised, so the ratio
+    can exceed 1 and the statistic can come out NEGATIVE -- which a genuine GLS
+    R^2 can never be, since the model nests the constant-only benchmark that
+    defines the denominator. (An earlier version of this function did exactly
+    that and produced GLS R^2 of -0.20 to -0.44 on the 25 portfolios.)
+
+    Consequence worth remembering when reading the output: the GLS R^2 describes
+    the fit of the GLS estimator, while the lambda table reports FM/OLS estimates.
+    That is the standard convention (it is what LNS do, and what Doukas & Han
+    report in their Table 3), but the two columns do refer to different
+    estimators of the same model."""
     Sigma = panel[port_cols].cov().values
     Sigma_inv = np.linalg.pinv(Sigma)
-    alpha = (avg_ret - fitted).values
-    iota = np.ones(len(port_cols))
-    Rbar = avg_ret.values
+    Rbar = panel[port_cols].mean().values
+    N = len(port_cols)
+    iota = np.ones(N)
+
+    X = np.column_stack([iota, beta_mat[list(factor_cols)].values])  # N x (K+1)
+    lam_gls = np.linalg.solve(X.T @ Sigma_inv @ X, X.T @ Sigma_inv @ Rbar)
+    alpha = Rbar - X @ lam_gls
+
     Rbar_gls_mean = (iota @ Sigma_inv @ Rbar) / (iota @ Sigma_inv @ iota)
-    num = alpha @ Sigma_inv @ alpha
-    den = (Rbar - Rbar_gls_mean * iota) @ Sigma_inv @ (Rbar - Rbar_gls_mean * iota)
-    return 1 - num / den
+    dev = Rbar - Rbar_gls_mean * iota
+    return 1 - (alpha @ Sigma_inv @ alpha) / (dev @ Sigma_inv @ dev)
 
 
 def chi2_joint_test(panel, port_cols, beta_mat, alpha, resid_mat, factor_cols=("s_lag", "mkt_rf", "s_mkt")):
@@ -347,8 +418,8 @@ def state_beta_analysis(panel, port_cols, beta_mat, threshold="1sd"):
 
 
 # ------------------------------------------------------------------- driver -
-def run(sentiment_kind="mcsi", threshold="1sd", portfolio_kind="25"):
-    panel, port_cols = build_panel(sentiment_kind, portfolio_kind)
+def run(sentiment_kind="mcsi", threshold="1sd", portfolio_kind="25", date_range=None):
+    panel, port_cols = build_panel(sentiment_kind, portfolio_kind, date_range)
     beta_mat, resid_mat = first_stage_betas(panel, port_cols)
     lam_df, lam_mean, se_fm, t_fm = fama_macbeth(panel, port_cols, beta_mat)
     shanken_mult = shanken_correction(lam_mean, panel)
@@ -357,7 +428,7 @@ def run(sentiment_kind="mcsi", threshold="1sd", portfolio_kind="25"):
     t_shanken = lam_mean / se_shanken
 
     avg_ret, fitted, alpha, r2, r2_adj = cross_sectional_fit(panel, port_cols, beta_mat, lam_mean)
-    r2gls = gls_r2(panel, port_cols, avg_ret, fitted)
+    r2gls = gls_r2(panel, port_cols, beta_mat)
     chi2, chi2_df, chi2_p = chi2_joint_test(panel, port_cols, beta_mat, alpha, resid_mat)
     state_out, state_table = state_beta_analysis(panel, port_cols, beta_mat, threshold)
 
@@ -387,22 +458,24 @@ def run(sentiment_kind="mcsi", threshold="1sd", portfolio_kind="25"):
 
 
 # --------------------------------------------------- scaled FF3 (Table 11) --
-def build_panel_ff3(sentiment_kind="mcsi", portfolio_kind="25"):
+def build_panel_ff3(sentiment_kind="mcsi", portfolio_kind="25", date_range=None):
     """Panel for the paper's Table 11 spec: sentiment-scaled FF3, i.e. the
     first-stage regressors are s_{t-1}*MktRF_t, s_{t-1}*SMB_t, s_{t-1}*HML_t
-    -- NOT a plain s_{t-1} level term (unlike the base scaled-CAPM Eq.9)."""
-    panel, port_cols = build_panel(sentiment_kind, portfolio_kind)
+    -- NOT a plain s_{t-1} level term (unlike the base scaled-CAPM Eq.9).
+    Only sentiment is lagged; SMB/HML are contemporaneous, same timing as
+    MktRF in build_panel() (see that function's docstring)."""
+    panel, port_cols = build_panel(sentiment_kind, portfolio_kind, date_range)
     panel["s_smb"] = panel["s_lag"] * panel["SMB"]
     panel["s_hml"] = panel["s_lag"] * panel["HML"]
     return panel, port_cols
 
 
-def run_ff3(sentiment_kind="mcsi", portfolio_kind="25"):
+def run_ff3(sentiment_kind="mcsi", portfolio_kind="25", date_range=None):
     """Table 11 analogue: E_t(R_i,t+1) = rf + b^s_i,m*lam^s_m + b^s_i,smb*lam^s_smb
     + b^s_i,hml*lam^s_hml, on the 25 Size-BM portfolios (paper tests all four
     sentiment indices against this spec)."""
     factor_cols = ("s_mkt", "s_smb", "s_hml")
-    panel, port_cols = build_panel_ff3(sentiment_kind, portfolio_kind)
+    panel, port_cols = build_panel_ff3(sentiment_kind, portfolio_kind, date_range)
     beta_mat, resid_mat = first_stage_betas(panel, port_cols, factor_cols)
     lam_df, lam_mean, se_fm, t_fm = fama_macbeth(panel, port_cols, beta_mat)
     shanken_mult = shanken_correction(lam_mean, panel, factor_cols)
@@ -412,7 +485,7 @@ def run_ff3(sentiment_kind="mcsi", portfolio_kind="25"):
 
     avg_ret, fitted, alpha, r2, r2_adj = cross_sectional_fit(
         panel, port_cols, beta_mat, lam_mean, factor_cols)
-    r2gls = gls_r2(panel, port_cols, avg_ret, fitted)
+    r2gls = gls_r2(panel, port_cols, beta_mat, factor_cols)
 
     print(f"\n{'='*78}\nSENTIMENT-SCALED FF3 (Table 11 analogue)  --  sentiment = {sentiment_kind.upper()}"
           f"  ({portfolio_kind}-portfolio test assets)\n{'='*78}")
@@ -427,6 +500,47 @@ def run_ff3(sentiment_kind="mcsi", portfolio_kind="25"):
     return {
         "panel": panel, "port_cols": port_cols, "beta_mat": beta_mat,
         "lambda_table": tbl, "r2": r2, "r2_adj": r2_adj, "r2_gls": r2gls,
+    }
+
+
+# ------------------------------------------------- plain (unscaled) FF3 baseline --
+def run_ff3_plain(sentiment_kind="mcsi", portfolio_kind="25", date_range=None):
+    """The 'usual' Fama-French 3-factor Fama-MacBeth test -- NOT scaled by
+    sentiment (contrast with run_ff3(), which is the sentiment-SCALED FF3,
+    Table 11 analogue). This is a baseline: plain Mkt-RF/SMB/HML betas
+    priced via standard two-pass Fama-MacBeth, sentiment plays no role in
+    the regression itself. sentiment_kind only restricts the sample to the
+    same overlap window used by the sentiment-scaled tests, so R^2/chi2
+    are directly comparable across models on an apples-to-apples sample."""
+    factor_cols = ("Mkt-RF", "SMB", "HML")
+    panel, port_cols = build_panel(sentiment_kind, portfolio_kind, date_range)
+    beta_mat, resid_mat = first_stage_betas(panel, port_cols, factor_cols)
+    lam_df, lam_mean, se_fm, t_fm = fama_macbeth(panel, port_cols, beta_mat)
+    shanken_mult = shanken_correction(lam_mean, panel, factor_cols)
+    se_shanken = se_fm.copy()
+    se_shanken[list(factor_cols)] *= shanken_mult
+    t_shanken = lam_mean / se_shanken
+
+    avg_ret, fitted, alpha, r2, r2_adj = cross_sectional_fit(
+        panel, port_cols, beta_mat, lam_mean, factor_cols)
+    r2gls = gls_r2(panel, port_cols, beta_mat, factor_cols)
+    chi2, chi2_df, chi2_p = chi2_joint_test(panel, port_cols, beta_mat, alpha, resid_mat, factor_cols)
+
+    print(f"\n{'='*78}\nPLAIN (unscaled) FAMA-FRENCH 3-FACTOR MODEL -- baseline"
+          f"  ({portfolio_kind}-portfolio test assets, sample matched to {sentiment_kind.upper()})\n{'='*78}")
+    print(f"Sample: {panel.index.min()} - {panel.index.max()}  (T = {len(panel)} months, N = {len(port_cols)} portfolios)\n")
+    tbl = pd.DataFrame({
+        "lambda": lam_mean, "t_FM": t_fm, "SE_FM": se_fm,
+        "t_Shanken": t_shanken, "SE_Shanken": se_shanken,
+    })
+    print(tbl.round(4))
+    print(f"\nR^2 (unadjusted): {r2:.4f}   R^2 (adjusted): {r2_adj:.4f}   R^2 (GLS): {r2gls:.4f}")
+    print(f"Chi2 joint pricing-error test: {chi2:.2f}  (df={chi2_df}, p={chi2_p:.4f})")
+
+    return {
+        "panel": panel, "port_cols": port_cols, "beta_mat": beta_mat,
+        "lambda_table": tbl, "r2": r2, "r2_adj": r2_adj, "r2_gls": r2gls,
+        "chi2": (chi2, chi2_df, chi2_p),
     }
 
 
@@ -566,14 +680,17 @@ def run_anomaly_tables(sentiment_kind="as", threshold="1sd"):
 
 
 # ------------------------------------------------- predictive regression (Table 2 / 13 Panel A) --
-def predictive_regression(sentiment_kind="mcsi", with_controls=True, horizon=1):
+def predictive_regression(sentiment_kind="mcsi", with_controls=True, horizon=1, date_range=None):
     """Table 2 / Table 13 Panel A analogue:
     MktRF_{t+1} = a + b*Sentiment_t + sum(alpha_i * Controls_t) + e_t
     (HAC/Newey-West SEs, 3 lags). NOTE: the paper's control set is real
     interest rate, inflation, term premium, default premium, AND CAY
     (Lettau-Ludvigson consumption-wealth ratio) -- CAY isn't in Goyal's
     predictor file and is omitted here (real_rate/term_premium/
-    default_premium/inflation only)."""
+    default_premium/inflation only). date_range=(start_ym, end_ym) restricts
+    the sample -- including the control variables -- to a common window
+    (e.g. COMMON_WINDOW) before standardizing sentiment, so different
+    indices are compared on an identical sample."""
     facs = load_factors()
     sent = _LOADERS[sentiment_kind]()
     panel = facs.join(sent, how="inner").sort_index()
@@ -582,6 +699,7 @@ def predictive_regression(sentiment_kind="mcsi", with_controls=True, horizon=1):
         controls = load_goyal_controls()
         panel = panel.join(controls, how="inner")
         control_cols = ["real_rate", "term_premium", "default_premium", "inflation"]
+    panel = _apply_date_range(panel, date_range)
     panel["sentiment_z"] = (panel["sentiment"] - panel["sentiment"].mean()) / panel["sentiment"].std()
     panel["mkt_rf_fwd"] = panel["Mkt-RF"].shift(-horizon)
 
@@ -593,7 +711,7 @@ def predictive_regression(sentiment_kind="mcsi", with_controls=True, horizon=1):
     return fit, reg_df
 
 
-def run_table13(sentiment_kind="pls", threshold="1sd", portfolio_kind="25"):
+def run_table13(sentiment_kind="pls", threshold="1sd", portfolio_kind="25", date_range=None):
     """Table 13 analogue: PLS-sentiment robustness check.
     Panel A: predictive regression of next-month market excess return on
     sentiment + macro controls (CAY omitted -- see predictive_regression
@@ -601,19 +719,19 @@ def run_table13(sentiment_kind="pls", threshold="1sd", portfolio_kind="25"):
     spec to Eq.9/Table 3 -- just reuses run())."""
     print(f"\n{'='*78}\nTABLE 13 analogue  --  sentiment = {sentiment_kind.upper()}\n{'='*78}")
     print("\n-- Panel A analogue: predictive regression (CAY control omitted -- not in Goyal's data) --")
-    fit, reg_df = predictive_regression(sentiment_kind, with_controls=True)
+    fit, reg_df = predictive_regression(sentiment_kind, with_controls=True, date_range=date_range)
     coef = fit.params["sentiment_z"]
     tstat = fit.tvalues["sentiment_z"]
     print(f"  beta_sentiment = {coef:.4f}   t (HAC) = {tstat:.3f}   (T = {len(reg_df)})")
     print(fit.summary().tables[1])
 
     print("\n-- Panel B analogue: conditional CAPM scaled by sentiment (Eq.9/Table 3 spec) --")
-    panelB = run(sentiment_kind, threshold=threshold, portfolio_kind=portfolio_kind)
+    panelB = run(sentiment_kind, threshold=threshold, portfolio_kind=portfolio_kind, date_range=date_range)
 
     return {"panelA_fit": fit, "panelB": panelB}
 
 
-def run_table2():
+def run_table2(date_range=None):
     """Table 2 analogue: predictive regression of next-month market excess
     return on lagged sentiment, Panel A (univariate, Eq.11) and Panel B
     (with controls -- real rate/term premium/default premium/inflation;
@@ -621,12 +739,12 @@ def run_table2():
     print(f"\n{'='*78}\nTABLE 2 analogue -- sentiment predicts next-month market excess return\n{'='*78}")
     rows_a, rows_b = {}, {}
     for kind in ["bw", "mcsi", "cbcci", "as"]:
-        fit_a, df_a = predictive_regression(kind, with_controls=False)
+        fit_a, df_a = predictive_regression(kind, with_controls=False, date_range=date_range)
         rows_a[kind.upper()] = {
             "beta": fit_a.params["sentiment_z"], "t": fit_a.tvalues["sentiment_z"],
             "R2_pct": 100 * fit_a.rsquared, "T": len(df_a),
         }
-        fit_b, df_b = predictive_regression(kind, with_controls=True)
+        fit_b, df_b = predictive_regression(kind, with_controls=True, date_range=date_range)
         rows_b[kind.upper()] = {
             "beta": fit_b.params["sentiment_z"], "t": fit_b.tvalues["sentiment_z"],
             "R2_pct": 100 * fit_b.rsquared, "T": len(df_b),
@@ -638,6 +756,36 @@ def run_table2():
     print("\n-- Panel B: with controls (real rate, term premium[approx], default premium, inflation) --")
     print(panelB.round(4))
     return {"panelA": panelA, "panelB": panelB}
+
+
+# --------------------------------------------- 5 individual sentiment-scaled CAPMs --
+def run_all_sentiments(portfolio_kind="industry48", threshold="1sd", date_range=COMMON_WINDOW):
+    """Convenience driver: runs the sentiment-scaled CAPM (Eq.9 spec, via
+    run()) individually for the 5 sentiment indices -- MCSI, CBCCI, PMI, BW,
+    CFNAI -- all on the SAME test-asset set and the SAME common date window
+    (default COMMON_WINDOW = Dec 1969-Dec 2025), so the 5 results are
+    directly comparable. Deliberately excludes the composite AS index this
+    round (it's built FROM BW/MCSI/CBCCI, so including it alongside those
+    three would be double-counting the same information)."""
+    kinds = ["mcsi", "cbcci", "pmi", "bw", "cfnai"]
+    results = {}
+    rows = []
+    for kind in kinds:
+        res = run(kind, threshold=threshold, portfolio_kind=portfolio_kind, date_range=date_range)
+        results[kind] = res
+        lam = res["lambda_table"]
+        rows.append({
+            "sentiment": kind.upper(),
+            "lam_s_lag": lam.loc["s_lag", "lambda"], "t_s_lag": lam.loc["s_lag", "t_Shanken"],
+            "lam_mkt_rf": lam.loc["mkt_rf", "lambda"], "t_mkt_rf": lam.loc["mkt_rf", "t_Shanken"],
+            "lam_s_mkt": lam.loc["s_mkt", "lambda"], "t_s_mkt": lam.loc["s_mkt", "t_Shanken"],
+            "R2": res["r2"], "R2_gls": res["r2_gls"],
+            "chi2_p": res["chi2"][2],
+        })
+    summary = pd.DataFrame(rows).set_index("sentiment")
+    print(f"\n{'='*78}\nSUMMARY -- 5 sentiment-scaled CAPMs, common window, {portfolio_kind} portfolios\n{'='*78}")
+    print(summary.round(4))
+    return {"results": results, "summary": summary}
 
 
 if __name__ == "__main__":

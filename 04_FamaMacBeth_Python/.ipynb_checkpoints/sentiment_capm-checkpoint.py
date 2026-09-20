@@ -44,6 +44,7 @@ IMPORTANT CAVEATS -- read before trusting numbers against the published tables:
   - This is a faithful-to-the-paper *implementation*, not a byte-for-byte
     reproduction: exact table values will differ from Doukas & Han (2021).
 """
+
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
@@ -627,3 +628,25 @@ if __name__ == "__main__":
     kind = sys.argv[1] if len(sys.argv) > 1 else "mcsi"
     port_kind = sys.argv[2] if len(sys.argv) > 2 else "25"
     run(kind, portfolio_kind=port_kind)
+def build_panel(sentiment_kind="mcsi", portfolio_kind="25"):
+    ports = _PORT_LOADERS[portfolio_kind]()
+    facs = load_factors()
+    sent = _LOADERS[sentiment_kind]()
+
+    panel = ports.join(facs, how="inner").join(sent, how="inner")
+    panel = panel.sort_index()
+    port_cols = list(ports.columns)
+    # drop any month with a missing test-asset return (e.g. an industry
+    # portfolio with no firms yet in the early decades) BEFORE standardizing
+    # sentiment, so the z-score isn't computed over a period we'll drop anyway
+    panel = panel.dropna(subset=port_cols)
+    # standardize sentiment over the estimation sample (mean 0, sd 1), as in the paper
+    panel["sentiment_z"] = (panel["sentiment"] - panel["sentiment"].mean()) / panel["sentiment"].std()
+    panel["s_lag"] = panel["sentiment_z"].shift(1)
+    panel["mkt_rf"] = panel["Mkt-RF"]
+    panel["s_mkt"] = panel["s_lag"] * panel["mkt_rf"]
+    panel = panel.dropna(subset=["s_lag", "s_mkt"])
+
+    for c in port_cols:
+        panel[c] = panel[c] - panel["RF"]  # excess returns
+    return panel, port_cols
